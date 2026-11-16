@@ -1,0 +1,5221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<script>
+/* Auto layout: landscape + wide screen -> "wide" (Chromebook/laptop/tablet landscape),
+   otherwise -> "tall" (phone / portrait). Re-evaluated on rotate and resize. */
+(function () {
+  var root = document.documentElement;
+  function typing() {
+    var a = document.activeElement;
+    return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA');
+  }
+  function apply(force) {
+    if (!force && typing()) return;       /* an on-screen keyboard shrinks the window: don't flip */
+    var w = window.innerWidth, h = window.innerHeight;
+    var v = (w > h && w >= 720) ? 'wide' : 'tall';
+    if (root.getAttribute('data-layout') !== v) root.setAttribute('data-layout', v);
+  }
+  apply(true);
+  window.addEventListener('resize', function () { apply(false); });
+  window.addEventListener('orientationchange', function () { setTimeout(function () { apply(true); }, 200); });
+  window.addEventListener('focusout', function () { setTimeout(function () { apply(false); }, 300); });
+  try {
+    var mq = window.matchMedia('(orientation: landscape)');
+    if (mq.addEventListener) mq.addEventListener('change', function () { apply(false); });
+    else if (mq.addListener) mq.addListener(function () { apply(false); });
+  } catch (e) {}
+})();
+</script>
+<title>Atomic Structure Explorer</title>
+
+<style>
+/* ============================================================
+   SECTION 1a — Reset, CSS Variables, Base Styles
+   ============================================================ */
+:root {
+  --primary:    #2c3e50;
+  --accent:     #3498db;
+  --success:    #27ae60;
+  --danger:     #e74c3c;
+  --warning:    #f39c12;
+  --light:      #ecf0f1;
+  --bg-deep:    #1a1a2e;
+  --bg-card:    #16213e;
+  --bg-inset:   #0f3460;
+  --border:     #34495e;
+  --text-main:  #eeeeee;
+  --text-muted: #aaaaaa;
+  --text-blue:  #aad4f5;
+  --electron:   #f1c40f;
+  --nucleus:    #e74c3c;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+/* ============================================================
+   SECTION 1b — Header & Navigation Styles
+   ============================================================ */
+header {
+  background: var(--primary);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+header h1 {
+  font-size: 1.3rem;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+nav { display: flex; gap: 10px; }
+
+.nav-btn {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--border);
+  color: #fff;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.nav-btn:hover    { background: var(--accent); }
+.nav-btn.active   { background: var(--accent); }
+.nav-btn:active   { transform: scale(0.96); }
+
+/* ============================================================
+   SECTION 1c — Periodic Table Grid Styles
+   ============================================================ */
+#page-table { padding: 20px 16px; }
+
+.pt-title {
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--text-blue);
+  margin-bottom: 12px;
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.legend-item { display: flex; align-items: center; gap: 5px; }
+
+.legend-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.periodic-grid {
+  display: grid;
+  grid-template-columns: repeat(18, 1fr);
+  gap: 3px;
+  max-width: 920px;
+  margin: 0 auto 20px;
+}
+
+.pt-cell {
+  aspect-ratio: 1;
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  border: 2px solid transparent;
+  position: relative;
+  padding: 2px;
+}
+
+.pt-cell:hover {
+  transform: scale(1.18);
+  box-shadow: 0 0 14px rgba(52,152,219,0.85);
+  z-index: 10;
+}
+
+.pt-cell.state-locked    { opacity: 0.45; cursor: not-allowed; }
+.pt-cell.state-unlocked  { border-color: var(--accent); }
+.pt-cell.state-completed { border-color: var(--success); }
+
+.pt-cell.state-locked:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.pt-num  { font-size: 0.5rem; opacity: 0.85; align-self: flex-start; padding-left: 2px; }
+.pt-sym  { font-size: 0.95rem; font-weight: 700; line-height: 1; }
+.pt-name { font-size: 0.4rem; opacity: 0.75; }
+
+.pt-empty {
+  background: transparent !important;
+  border: none !important;
+  cursor: default !important;
+  pointer-events: none;
+}
+
+/* Element group colours */
+.grp-alkali    { background: #7b241c; }
+.grp-alkaline  { background: #6e4c1e; }
+.grp-metal     { background: #1a4a6b; }
+.grp-nonmetal  { background: #1d6a40; }
+.grp-halogen   { background: #0e6655; }
+.grp-noble     { background: #5b2c6f; }
+.grp-empty-bg  { background: #1e2a38; }
+
+/* ============================================================
+   SECTION 1d — Learn Page: Notation Cards & Info Grid
+   ============================================================ */
+#page-learn { padding: 20px 16px; max-width: 880px; margin: 0 auto; }
+
+.learn-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.back-btn {
+  background: var(--border);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.back-btn:hover { background: var(--accent); }
+
+.element-badge {
+  background: var(--bg-card);
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 20px;
+  text-align: center;
+}
+
+.element-badge .sym  { font-size: 1.8rem; font-weight: 700; color: #fff; line-height: 1; }
+.element-badge .name { font-size: 0.78rem; color: var(--text-blue); margin-top: 2px; }
+
+.notation-row {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.notation-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  flex: 1;
+  min-width: 190px;
+}
+
+.notation-card h3 {
+  font-size: 0.72rem;
+  color: var(--text-blue);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+
+/* Nuclide notation display */
+.nuclide-display {
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.nuclide-scripts {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  line-height: 1.15;
+  margin-right: 1px;
+}
+
+.nuclide-mass   { color: var(--warning); }
+.nuclide-atomic { color: var(--accent);  }
+
+.notation-footnote {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 7px;
+}
+
+/* Info grid (protons / electrons / shells) */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.info-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 10px;
+  text-align: center;
+}
+
+.info-box .val { font-size: 1.7rem; font-weight: 700; color: var(--accent); }
+.info-box .lbl { font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; }
+
+/* ============================================================
+   SECTION 1e — Dot-and-Cross Diagram Styles
+   ============================================================ */
+.diagram-area {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.diagram-title {
+  font-size: 0.78rem;
+  color: var(--text-blue);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+
+.atom-canvas {
+  position: relative;
+  width: min(380px, 100%);
+  aspect-ratio: 1;
+  margin: 0 auto 30px;
+}
+
+.shell-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.nucleus {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #e74c3c, #7b241c);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #fff;
+  z-index: 5;
+  box-shadow: 0 0 14px rgba(231,76,60,0.55);
+}
+
+.electron-dot {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--electron);
+  border: 1.5px solid var(--warning);
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  box-shadow: 0 0 5px rgba(241,196,15,0.65);
+  pointer-events: none;
+}
+
+/* Shell colour rings */
+.ring-1 { border-color: #e74c3c55; }
+.ring-2 { border-color: #3498db55; }
+.ring-3 { border-color: #27ae6055; }
+.ring-4 { border-color: #9b59b655; }
+
+/* ============================================================
+   SECTION 1f — Drag-and-Drop Styles
+   ============================================================ */
+.dnd-area {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.dnd-title {
+  font-size: 0.78rem;
+  color: var(--warning);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.dnd-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.electron-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 44px;
+  background: var(--bg-inset);
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  padding: 9px;
+  margin-bottom: 14px;
+}
+
+.bank-electron {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--electron);
+  border: 2px solid var(--warning);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #333;
+  user-select: none;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.bank-electron:hover      { transform: scale(1.2); box-shadow: 0 0 8px rgba(241,196,15,0.7); }
+.bank-electron.is-dragging { opacity: 0.35; cursor: grabbing; }
+
+
+
+
+
+
+
+.dropped-electron {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--electron);
+  border: 2px solid var(--warning);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #333;
+  user-select: none;
+  transition: transform 0.1s;
+}
+
+.dropped-electron:hover { transform: scale(1.15); }
+
+.dnd-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.dnd-feedback {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  display: none;
+}
+
+.dnd-feedback.show     { display: block; }
+.dnd-feedback.fb-ok    { background: #1a3a2a; border: 1px solid var(--success); color: #2ecc71; }
+.dnd-feedback.fb-error { background: #3a1a1a; border: 1px solid var(--danger);  color: #e74c3c; }
+
+/* Hint sparkle */
+.hint-sparkle {
+  position: absolute;
+  pointer-events: none;
+  font-size: 1.1rem;
+  z-index: 50;
+  animation: sparkle-float 1.1s ease-out forwards;
+}
+
+@keyframes sparkle-float {
+  0%   { opacity: 1; transform: translateY(0)    scale(1.2); }
+  100% { opacity: 0; transform: translateY(-45px) scale(0.4); }
+}
+
+/* ============================================================
+   SECTION 1g — Revision Quiz Styles
+   ============================================================ */
+#page-revision { padding: 20px 16px; max-width: 680px; margin: 0 auto; }
+
+.revision-header {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.revision-header h2 { font-size: 1.3rem; color: var(--text-blue); }
+.revision-header p  { font-size: 0.82rem; color: var(--text-muted); margin-top: 5px; }
+
+.quiz-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.progress-bar-wrap {
+  background: var(--border);
+  border-radius: 10px;
+  height: 6px;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 10px;
+  transition: width 0.35s ease;
+}
+
+.quiz-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+.q-type-badge {
+  display: inline-block;
+  font-size: 0.62rem;
+  padding: 3px 10px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.badge-mcq  { background: #1a5276; color: var(--text-blue); }
+.badge-fill { background: #1e5631; color: #a9dfbf; }
+.badge-dnd  { background: #6e4c1e; color: #fad7a0; }
+
+.q-text {
+  font-size: 0.95rem;
+  color: #fff;
+  margin-bottom: 16px;
+  line-height: 1.55;
+}
+
+/* MCQ */
+.mcq-options { display: flex; flex-direction: column; gap: 9px; }
+
+.mcq-option {
+  background: var(--bg-inset);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.mcq-option:hover    { border-color: var(--accent); background: #1a4a7a; }
+.mcq-option.selected { border-color: var(--accent); background: #1a4a7a; }
+
+/* Fill-in */
+.fill-inputs { display: flex; flex-direction: column; gap: 10px; }
+
+.fill-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.88rem;
+  flex-wrap: wrap;
+}
+
+.fill-row label { color: var(--text-muted); min-width: 130px; }
+
+.fill-row input {
+  background: var(--bg-inset);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #fff;
+  font-size: 0.88rem;
+  width: 80px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.fill-row input:focus { border-color: var(--accent); }
+
+/* Quiz DnD */
+.quiz-dnd-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 40px;
+  background: var(--bg-inset);
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  padding: 9px;
+  margin-bottom: 12px;
+}
+
+
+
+
+
+
+/* ============================================================
+   SECTION 1h — Results Page Styles
+   ============================================================ */
+.results-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 26px;
+}
+
+.results-card h2 {
+  text-align: center;
+  font-size: 1.2rem;
+  color: var(--text-blue);
+  margin-bottom: 20px;
+}
+
+.score-circle {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 6px solid var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.score-circle .score-num { font-size: 1.9rem; font-weight: 700; color: #fff; line-height: 1; }
+.score-circle .score-lbl { font-size: 0.65rem; color: var(--text-muted); margin-top: 3px; }
+
+.score-grade {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.results-breakdown { margin-top: 16px; }
+
+.results-breakdown h3 {
+  font-size: 0.78rem;
+  color: var(--text-blue);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+
+.result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.82rem;
+}
+
+.result-icon   { font-size: 0.95rem; flex-shrink: 0; margin-top: 1px; }
+.result-q-text { color: var(--text-main); flex: 1; }
+.result-detail { color: var(--text-muted); font-size: 0.74rem; margin-top: 3px; }
+.result-correct { color: #2ecc71; }
+.result-wrong   { color: #e74c3c; }
+
+.email-section {
+  margin-top: 22px;
+  background: var(--bg-inset);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.email-section h3 {
+  font-size: 0.85rem;
+  color: var(--text-blue);
+  margin-bottom: 10px;
+}
+
+.email-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.email-row input {
+  flex: 1;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 0.82rem;
+  outline: none;
+  min-width: 180px;
+  transition: border-color 0.2s;
+}
+
+.email-row input:focus { border-color: var(--accent); }
+
+.send-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* ============================================================
+   SECTION 1i — Utility: Buttons, Toast, Animations, Responsive
+   ============================================================ */
+
+/* Shared buttons */
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 9px 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.btn-primary:hover  { background: #2980b9; }
+.btn-primary:active { transform: scale(0.96); }
+
+.btn-secondary {
+  background: var(--border);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 9px 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover { background: #4a6278; }
+
+.btn-success {
+  background: var(--success);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 9px 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-success:hover { background: #219a52; }
+
+.btn-warning {
+  background: var(--warning);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 9px 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-warning:hover    { background: #d68910; }
+.btn-warning:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Hint button with twinkle */
+.btn-hint {
+  background: var(--warning);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 9px 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  position: relative;
+  animation: hint-pulse 1.8s infinite;
+}
+
+@keyframes hint-pulse {
+  0%, 100% { box-shadow: 0 0 6px var(--warning), 0 0 12px var(--warning); }
+  50%       { box-shadow: 0 0 20px #f1c40f,       0 0 36px #f1c40f; }
+}
+
+/* Element nav arrows */
+.element-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.nav-arrow {
+  background: var(--border);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 20px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: background 0.2s;
+}
+
+.nav-arrow:hover    { background: var(--accent); }
+.nav-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Toast */
+#toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(70px);
+  background: var(--primary);
+  color: #fff;
+  padding: 11px 24px;
+  border-radius: 24px;
+  font-size: 0.88rem;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+  transition: transform 0.3s ease;
+  z-index: 999;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+#toast.show { transform: translateX(-50%) translateY(0); }
+
+/* Responsive */
+@media (max-width: 620px) {
+  header h1    { font-size: 1rem; }
+  .periodic-grid { gap: 2px; }
+  .pt-sym      { font-size: 0.75rem !important; }
+  .pt-num, .pt-name { display: none; }
+  .notation-row { flex-direction: column; }
+  .info-grid   { grid-template-columns: repeat(3,1fr); gap: 6px; }
+}
+
+/* ============================================================
+   Fixes / additions
+   ============================================================ */
+button.pt-cell { font-family: inherit; color: #fff; }
+.grp-metalloid { background: #7d6608; }
+header { flex-wrap: wrap; gap: 8px; }
+#toast { white-space: normal; max-width: 90vw; text-align: center; }
+.btn-warning, .btn-hint { color: #1a1a2e; }
+.bank-electron.selected { outline: 2px solid #fff; transform: scale(1.2); }
+button.mcq-option { width: 100%; text-align: left; color: inherit; font-family: inherit; }
+.reset-wrap { text-align: center; margin-top: 8px; }
+#results-text:not([hidden]) {
+  display: block; width: 100%; margin-top: 10px; padding: 8px 10px;
+  background: var(--bg-card); color: var(--text-main);
+  border: 2px solid var(--border); border-radius: 8px;
+  font: 0.75rem/1.4 monospace; resize: vertical;
+}
+button:focus-visible, .bank-electron:focus-visible, .dropped-electron:focus-visible,
+.shell-drop-zone:focus-visible, .quiz-shell-zone:focus-visible,
+.mcq-option:focus-visible, input:focus-visible {
+  outline: 3px solid #fff; outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-hint { animation: none; }
+  .hint-sparkle { animation-duration: 0.01s; }
+  * { transition: none !important; }
+}
+
+/* ============================================================
+   Pointer (mouse / touch / pen) drag-and-drop
+   ============================================================ */
+.bank-electron, .dropped-electron {
+  touch-action: none;                 /* let us handle the drag, not page scroll */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.dropped-electron { cursor: grab; }
+.drag-ghost {
+  position: fixed;
+  z-index: 2000;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1.3);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.55);
+  opacity: 0.95;
+}
+body.is-dragging-electron,
+body.is-dragging-electron * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+@media (pointer: coarse) {            /* bigger targets for fingers */
+  .electron-bank { gap: 9px; }
+}
+
+/* ============================================================
+   Shell drop targets = the concentric circles of the atom diagram.
+   The circles are stacked (inner on top), so the circle that is
+   topmost under the pointer is the band the electron is dropped in.
+   ============================================================ */
+.shell-drop-zones, .quiz-shell-zones {
+  position: relative;
+  width: min(380px, 100%);
+  aspect-ratio: 1;
+  margin: 10px auto 4px;
+}
+.shell-drop-zones .nucleus, .quiz-shell-zones .nucleus {
+  z-index: 20;
+  pointer-events: none;
+}
+.shell-drop-zone, .quiz-shell-zone {
+  --ring: #3498db;
+  --inner: 0%;
+  --hl: transparent;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  aspect-ratio: 1;
+  border: 2px solid var(--ring);
+  border-radius: 50%;
+  /* highlight only the band between this ring and the next ring in */
+  background: radial-gradient(circle closest-side,
+              transparent var(--inner), var(--hl) var(--inner));
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+/* hovering electron: the circle itself glows (no filled band) */
+.shell-drop-zone.drag-over,
+.quiz-shell-zone.drag-over {
+  border-color: #fff;
+  box-shadow: 0 0 6px 1px var(--ring), 0 0 16px 4px var(--ring),
+              inset 0 0 6px 1px var(--ring), inset 0 0 16px 4px var(--ring);
+}
+.shell-drop-zone.dnd-correct { --hl: rgba(39,174,96,0.30);  border-color: var(--success); }
+.shell-drop-zone.dnd-wrong   { --hl: rgba(231,76,60,0.30);  border-color: var(--danger);  }
+
+.ring-electrons { position: absolute; inset: 0; pointer-events: none; }
+.ring-electrons .dropped-electron {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+.ring-electrons .dropped-electron:hover { transform: translate(-50%, -50%) scale(1.15); }
+
+.ring-label {
+  position: absolute;
+  left: 85.4%;   /* -45deg: the diagonal between the top and right electron positions */
+  top: 14.6%;
+  transform: translate(-50%, -50%);
+  font-size: 0.6rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 4px #000, 0 0 4px #000;
+}
+#shell-drop-zones:not(.show-max) .ring-label { display: none; }
+.btn-hint[aria-pressed="true"] { box-shadow: 0 0 0 2px #fff inset; }
+.ring-label.hint { color: var(--warning) !important; font-size: 0.72rem; z-index: 5; }
+
+/* Electron size on the rings follows the diagram width (min 22px, max 38px) */
+.shell-drop-zones, .quiz-shell-zones {
+}
+.ring-electrons .dropped-electron {
+}
+
+/* ============================================================
+   One electron size, used by the worked-example diagram, the bank,
+   the rings in the drag-and-drop and the electron being dragged.
+   It is tied to the diagram width (the diagram is min(380px, 100%) wide).
+   ============================================================ */
+.diagram-area, .dnd-area, #quiz-dnd-container {
+  --e: 30px;                                   /* fallback */
+}
+@supports (width: 1cqw) {
+  .diagram-area, .dnd-area, #quiz-dnd-container {
+    container-type: inline-size;
+    --e: clamp(26px, calc(min(380px, 100cqw) * 0.092), 38px);
+  }
+}
+.bank-electron,
+.ring-electrons .dropped-electron,
+.atom-canvas .electron-dot {
+  width:  var(--e);
+  height: var(--e);
+  font-size: calc(var(--e) * 0.34);
+}
+.atom-canvas .electron-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  font-weight: 700;
+  line-height: 1;
+  font-size: calc(var(--e) * 0.62);            /* the dot / cross mark */
+  border-width: 2px;
+}
+
+/* ============================================================
+   Electrons are drawn as a bare dot or cross (no circle).
+   The element keeps its full size as the touch / mouse target.
+   body.sym-cross switches every electron on the page to crosses.
+   ============================================================ */
+.bank-electron:not(.drag-ghost) { position: relative; }
+.bank-electron,
+.ring-electrons .dropped-electron,
+.atom-canvas .electron-dot {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: transparent;
+  font-size: 0;
+}
+.bank-electron:hover { box-shadow: none; filter: drop-shadow(0 0 4px var(--electron)); }
+.bank-electron.drag-ghost { box-shadow: none; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6)); }
+
+:is(.bank-electron, .ring-electrons .dropped-electron, .atom-canvas .electron-dot)::before,
+:is(.bank-electron, .ring-electrons .dropped-electron, .atom-canvas .electron-dot)::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: var(--electron);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+/* dot */
+:is(.bank-electron, .ring-electrons .dropped-electron, .atom-canvas .electron-dot)::before {
+  width:  calc(var(--e) * 0.34);
+  height: calc(var(--e) * 0.34);
+  border-radius: 50%;
+}
+:is(.bank-electron, .ring-electrons .dropped-electron, .atom-canvas .electron-dot)::after { display: none; }
+/* cross: two bars */
+body.sym-cross :is(.bank-electron, .ring-electrons .dropped-electron, .atom-canvas .electron-dot)::before,
+body.sym-cross :is(.bank-electron, .ring-electrons .dropped-electron, .atom-canvas .electron-dot)::after {
+  display: block;
+  width:  calc(var(--e) * 0.5);
+  height: max(3px, calc(var(--e) * 0.1));
+  border-radius: 2px;
+}
+body.sym-cross :is(.bank-electron, .ring-electrons .dropped-electron, .atom-canvas .electron-dot)::before { transform: translate(-50%, -50%) rotate(45deg); }
+body.sym-cross :is(.bank-electron, .ring-electrons .dropped-electron, .atom-canvas .electron-dot)::after  { transform: translate(-50%, -50%) rotate(-45deg); }
+
+/* dot / cross toggle */
+.sym-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.sym-btn {
+  background: var(--border);
+  color: #fff;
+  border: none;
+  border-radius: 16px;
+  padding: 5px 13px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.sym-btn:hover  { background: #4a6278; }
+.sym-btn.active { background: var(--accent); }
+
+/* ============================================================
+   ADAPTIVE LAYOUTS  (html[data-layout] is set by the script in <head>)
+   wide = landscape / Chromebook      tall = portrait / phone
+   ============================================================ */
+.pt-cell { grid-column: var(--col); }
+html[data-layout] .atom-canvas,
+html[data-layout] .shell-drop-zones,
+html[data-layout] .quiz-shell-zones { width: min(var(--canvas, 380px), 100%); }
+.dnd-bottom { display: block; }
+
+/* ---------- WIDE (landscape) ---------- */
+html[data-layout="wide"] { font-size: 17px; --canvas: clamp(280px, calc(100vh - 250px), 440px); }
+@supports (width: 1cqw) {
+  html[data-layout="wide"] .diagram-area,
+  html[data-layout="wide"] .dnd-area,
+  html[data-layout="wide"] #quiz-dnd-container {
+    --e: clamp(26px, calc(min(var(--canvas), 100cqw) * 0.092), 38px);
+  }
+}
+html[data-layout="wide"] header { padding: 10px 28px; }
+
+/* periodic table: use the whole width */
+html[data-layout="wide"] .periodic-grid { max-width: 1180px; gap: 5px; }
+html[data-layout="wide"] .legend { font-size: 0.8rem; }
+html[data-layout="wide"] .pt-sym { font-size: 1.25rem !important; }
+
+/* learn page: facts on the left, the atom on the right (kept in view) */
+html[data-layout="wide"] #page-learn[style*="display: block"] {
+  display: grid !important;
+  max-width: 1260px;
+  padding: 14px 24px;
+  grid-template-columns: minmax(290px, 0.8fr) minmax(0, 1.5fr);
+  grid-template-areas: "head diag" "info diag" "nota diag" "nav diag";
+  grid-template-rows: auto auto auto 1fr;
+  column-gap: 22px;
+  align-items: start;
+}
+html[data-layout="wide"] .learn-header { grid-area: head; margin-bottom: 12px; }
+html[data-layout="wide"] .info-grid    { grid-area: info; margin-bottom: 12px; }
+html[data-layout="wide"] .notation-row { grid-area: nota; flex-direction: column; flex-wrap: nowrap; gap: 10px; margin-bottom: 12px; }
+html[data-layout="wide"] .notation-card { flex: none; min-width: 0; padding: 12px 16px; }
+html[data-layout="wide"] .element-nav  { grid-area: nav; margin-top: 0; align-self: start; }
+html[data-layout="wide"] #static-diagram,
+html[data-layout="wide"] #dnd-area {
+  grid-area: diag;
+  position: sticky; top: 74px;
+  margin-bottom: 0;
+}
+html[data-layout="wide"] .atom-canvas { margin-bottom: 36px; }
+
+/* build-the-arrangement: circles left, bank and buttons right */
+html[data-layout="wide"] .dnd-area:not([style*="none"]) {
+  display: grid !important;
+  grid-template-columns: var(--canvas) minmax(0, 1fr);
+  column-gap: 22px;
+  align-content: start;
+  grid-template-areas: "title title" "sub sub" "zones tog" "zones bank" "zones bot" "zones ref";
+  grid-template-rows: auto auto auto auto auto 1fr;
+}
+html[data-layout="wide"] .dnd-title  { grid-area: title; }
+html[data-layout="wide"] .dnd-subtitle    { grid-area: sub; }
+html[data-layout="wide"] .dnd-area .sym-toggle { grid-area: tog; }
+html[data-layout="wide"] .electron-bank   { grid-area: bank; align-content: flex-start; min-height: 96px; }
+html[data-layout="wide"] .shell-drop-zones { grid-area: zones; margin: 0; align-self: start; }
+html[data-layout="wide"] .dnd-bottom      { grid-area: bot; }
+
+/* quiz */
+html[data-layout="wide"] #page-revision { max-width: 1040px; padding: 12px 20px; }
+html[data-layout="wide"] .revision-header { margin-bottom: 10px; }
+html[data-layout="wide"] .revision-header p { display: none; }
+html[data-layout="wide"] .mcq-options { display: grid; grid-template-columns: 1fr 1fr; }
+html[data-layout="wide"] .quiz-card:has(#quiz-dnd-container:not([style*="none"])) {
+  display: grid;
+  grid-template-columns: var(--canvas) minmax(0, 1fr);
+  column-gap: 24px;
+  align-content: start;
+  grid-template-areas: "zones badge" "zones text" "zones tog" "zones bank" "zones .";
+  grid-template-rows: auto auto auto auto 1fr;
+}
+html[data-layout="wide"] .quiz-card:has(#quiz-dnd-container:not([style*="none"])) #quiz-dnd-container { display: contents !important; }
+html[data-layout="wide"] #q-type-badge { grid-area: badge; }
+html[data-layout="wide"] #q-text       { grid-area: text; }
+html[data-layout="wide"] #quiz-dnd-container .sym-toggle { grid-area: tog; }
+html[data-layout="wide"] .quiz-dnd-bank   { grid-area: bank; align-content: flex-start; min-height: 96px; }
+html[data-layout="wide"] .quiz-shell-zones { grid-area: zones; margin: 0; align-self: start; }
+
+/* short landscape screens (phone on its side): no sticky panel, tighter chrome */
+@media (max-height: 560px) {
+  html[data-layout="wide"] { font-size: 16px; }
+  html[data-layout="wide"] header { position: static; padding: 6px 16px; }
+  html[data-layout="wide"] header h1 { font-size: 1rem; }
+  html[data-layout="wide"] #static-diagram,
+  html[data-layout="wide"] #dnd-area { position: static; padding: 12px; }
+  html[data-layout="wide"] .dnd-subtitle { font-size: 0.7rem; margin-bottom: 6px; }
+  html[data-layout="wide"] #page-learn[style*="display: block"] { padding: 8px 16px; }
+}
+
+/* ---------- TALL (portrait / phone) ---------- */
+html[data-layout="tall"] { --canvas: 380px; }
+html[data-layout="tall"] header {
+  position: static; padding: 8px 12px; justify-content: center; gap: 6px;
+}
+html[data-layout="tall"] header h1 { font-size: 0.95rem; }
+html[data-layout="tall"] nav { width: 100%; }
+html[data-layout="tall"] .nav-btn { flex: 1; padding: 10px 8px; font-size: 0.8rem; min-height: 44px; }
+#toast:not(.show) { visibility: hidden; }
+html[data-layout="tall"] #toast { bottom: 96px; }
+html[data-layout="tall"] .btn-primary, html[data-layout="tall"] .btn-secondary,
+html[data-layout="tall"] .btn-hint, html[data-layout="tall"] .nav-arrow,
+html[data-layout="tall"] .back-btn { min-height: 44px; }
+
+/* periodic table: columns 3-12 are empty for the first 20 elements, so drop them */
+html[data-layout="tall"] .periodic-grid { grid-template-columns: repeat(8, 1fr); gap: 5px; max-width: 440px; }
+html[data-layout="tall"] .pt-cell { grid-column: var(--col-tall); }
+html[data-layout="tall"] .pt-num { display: block !important; font-size: 0.58rem !important; }
+html[data-layout="tall"] .pt-sym { font-size: 1.15rem !important; }
+html[data-layout="tall"] .pt-name { display: none !important; }
+html[data-layout="tall"] .legend { gap: 5px 12px; font-size: 0.68rem; justify-content: flex-start; }
+html[data-layout="tall"] .pt-title { font-size: 0.85rem; }
+
+/* learn page: one column, the interactive part first */
+html[data-layout="tall"] #page-learn[style*="display: block"] {
+  display: flex !important; flex-direction: column; gap: 10px; padding: 10px 12px 14px;
+}
+html[data-layout="tall"] #page-learn > * { margin-bottom: 0; margin-top: 0; }
+html[data-layout="tall"] .learn-header { order: 1; flex-wrap: nowrap; }
+html[data-layout="tall"] .info-grid { order: 2; gap: 6px; }
+html[data-layout="tall"] .info-box { padding: 8px 4px; }
+html[data-layout="tall"] .info-box .val { font-size: 1.3rem; }
+html[data-layout="tall"] .info-box .lbl { font-size: 0.66rem; }
+html[data-layout="tall"] #static-diagram, html[data-layout="tall"] #dnd-area { order: 3; padding: 12px; }
+html[data-layout="tall"] .notation-row {
+  order: 4; flex-wrap: nowrap; overflow-x: auto; gap: 10px;
+  scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding-bottom: 4px;
+}
+html[data-layout="tall"] .notation-card { flex: 0 0 84%; min-width: 0; scroll-snap-align: start; }
+html[data-layout="tall"] .element-nav { order: 5; }
+html[data-layout="tall"] .element-nav .nav-arrow { flex: 1; }
+html[data-layout="tall"] .atom-canvas { margin-bottom: 14px; }
+html[data-layout="tall"] .dnd-subtitle { font-size: 0.72rem; margin-bottom: 8px; line-height: 1.35; }
+html[data-layout="tall"] .sym-toggle { margin-bottom: 8px; }
+html[data-layout="tall"] .sym-btn { padding: 8px 14px; min-height: 36px; }
+
+/* the bank stays in view while you drag onto the circles */
+html[data-layout="tall"] .electron-bank,
+html[data-layout="tall"] .quiz-dnd-bank {
+  position: sticky; top: 6px; z-index: 25;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.45); margin-bottom: 8px;
+}
+html[data-layout="tall"] .shell-drop-zones, html[data-layout="tall"] .quiz-shell-zones { margin-top: 4px; }
+
+/* feedback and buttons stay at the thumb */
+html[data-layout="tall"] .dnd-bottom {
+  position: sticky; bottom: 0; z-index: 30;
+  margin: 8px -12px -12px; padding: 8px 12px max(10px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--bg-card) 12px);
+  border-radius: 0 0 12px 12px;
+}
+html[data-layout="tall"] .dnd-feedback { margin-top: 0; margin-bottom: 8px; font-size: 0.8rem; padding: 8px 10px; }
+html[data-layout="tall"] .dnd-controls { margin-top: 0; flex-wrap: nowrap; gap: 8px; }
+html[data-layout="tall"] .dnd-controls > button { flex: 1; padding: 10px 6px; font-size: 0.82rem; white-space: nowrap; }
+html[data-layout="tall"] .dnd-controls > .btn-primary { flex: 1.5; }
+
+/* quiz */
+html[data-layout="tall"] #page-revision { padding: 10px 12px 0; }
+html[data-layout="tall"] .revision-header { margin-bottom: 10px; }
+html[data-layout="tall"] .revision-header h2 { font-size: 1.1rem; }
+html[data-layout="tall"] .revision-header p { font-size: 0.75rem; }
+html[data-layout="tall"] .quiz-card { padding: 14px; margin-bottom: 10px; }
+html[data-layout="tall"] .q-text { font-size: 0.95rem; margin-bottom: 12px; }
+html[data-layout="tall"] .mcq-option { min-height: 48px; padding: 12px 14px; font-size: 0.95rem; }
+html[data-layout="tall"] .fill-row label { min-width: 0; width: 100%; }
+html[data-layout="tall"] .fill-row input { width: 100px; padding: 10px; font-size: 16px; }
+html[data-layout="tall"] .quiz-next-wrap {
+  position: sticky; bottom: 0; z-index: 30; margin: 0 -12px; padding: 8px 12px max(10px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--bg-deep) 12px);
+}
+html[data-layout="tall"] #btn-next-question { width: 100%; min-height: 48px; }
+
+/* ============================================================
+   ARCADE
+   ============================================================ */
+#page-arcade { padding: 20px 16px; max-width: 1100px; margin: 0 auto; }
+.arc-head { text-align: center; margin-bottom: 14px; }
+.arc-head h2 { font-size: 1.3rem; color: var(--text-blue); }
+.arc-head p  { font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; line-height: 1.5; }
+.arc-note { text-align: center; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 14px; }
+.arc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.arc-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.arc-card h3 { color: #fff; font-size: 1.05rem; }
+.arc-card p { font-size: 0.83rem; color: var(--text-muted); line-height: 1.55; flex: 1; }
+.arc-best { font-size: 0.78rem; color: var(--warning); }
+.arc-card .btn-primary { align-self: flex-start; }
+.arc-badges { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.arc-badge { display: flex; align-items: center; gap: 10px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 14px; opacity: 0.4; filter: grayscale(1); }
+.arc-badge.on { opacity: 1; filter: none; border-color: var(--warning); }
+.arc-badge span { font-size: 1.5rem; }
+.arc-badge b { display: block; font-size: 0.82rem; color: #fff; }
+.arc-badge small { display: block; font-size: 0.68rem; color: var(--text-muted); }
+
+.arc-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.arc-title { font-weight: 700; color: #fff; }
+.arc-stats { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.9rem; color: var(--text-main); font-weight: 600; }
+.arc-timer { height: 8px; background: var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+.arc-timer div { height: 100%; width: 100%; background: var(--accent); transition: width 0.15s linear; }
+.arc-grid { display: flex; flex-direction: column; gap: 12px; }
+.arc-clue { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.arc-clue h4 { font-size: 0.72rem; color: var(--text-blue); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.arc-clue-row { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 0.9rem; color: var(--text-muted); }
+.arc-clue-row b { color: #fff; font-size: 1.25rem; margin-left: 4px; }
+.arc-msg { display: none; font-size: 0.88rem; line-height: 1.45; padding: 10px 12px; border-radius: 8px; margin-top: 12px; }
+.arc-msg.show { display: block; }
+.arc-msg.info { background: #14213d; border: 1px solid var(--border); color: var(--text-main); }
+.arc-msg.ok   { background: #1a3a2a; border: 1px solid var(--success); color: #2ecc71; }
+.arc-msg.bad  { background: #3a1a1a; border: 1px solid var(--danger); color: #e74c3c; }
+.arc-side .sym-toggle { margin: 12px 0 0; }
+.arc-bottom { display: flex; gap: 10px; flex-wrap: wrap; }
+#arc-board { margin: 0 auto; }
+.arc-board-wrap { margin-bottom: 0; }
+#arc-board .ring-label { display: none; }
+.dropped-electron.selected { outline: 2px solid #fff; outline-offset: 2px; border-radius: 50%; }
+
+.arc-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.arc-opt { background: var(--bg-card); border: 2px solid var(--border); border-radius: 12px; padding: 10px; cursor: pointer;
+  color: #fff; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  container-type: inline-size; --e: 18px; transition: border-color 0.15s, transform 0.1s; }
+.arc-opt:hover { border-color: var(--accent); }
+.arc-opt:active { transform: scale(0.98); }
+@supports (width: 1cqw) { .arc-opt { --e: clamp(13px, 11.5cqw, 30px); } }
+html[data-layout] .arc-opt .atom-canvas { width: 100%; margin: 0 auto; }
+.arc-opt .nucleus { width: 12%; height: auto; aspect-ratio: 1; box-shadow: none; }
+.arc-cap { font-size: 0.78rem; color: var(--text-muted); min-height: 1.2em; text-align: center; }
+.arc-opt.correct { border-color: var(--success); box-shadow: 0 0 14px rgba(39,174,96,0.55); }
+.arc-opt.wrong { border-color: var(--danger); box-shadow: 0 0 14px rgba(231,76,60,0.55); }
+.arc-opt.dim { opacity: 0.3; pointer-events: none; }
+
+.arc-result-card { max-width: 520px; margin: 24px auto; text-align: center; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 14px; padding: 26px 20px; }
+.arc-result-card h2 { color: var(--text-blue); font-size: 1.3rem; margin-bottom: 10px; }
+.arc-big { font-size: 2.2rem; font-weight: 800; color: var(--warning); margin-bottom: 8px; word-break: break-all; letter-spacing: 2px; }
+.arc-lines { color: var(--text-muted); font-size: 0.9rem; line-height: 1.8; }
+.arc-score { margin: 12px 0; font-size: 1.05rem; font-weight: 700; color: #fff; }
+.arc-earned { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 14px; }
+.arc-earned span { background: #3a2f0b; border: 1px solid var(--warning); border-radius: 16px; padding: 5px 12px; font-size: 0.82rem; color: #fff; }
+.arc-bottom-static { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* wide: clue and controls on the left, board or options on the right */
+html[data-layout="wide"] #page-arcade { max-width: 1180px; padding: 14px 24px; }
+html[data-layout="wide"] .arc-grid {
+  display: grid; grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.4fr);
+  grid-template-areas: "side main" "ctl main"; grid-template-rows: auto 1fr;
+  column-gap: 22px; row-gap: 12px; align-items: start;
+}
+html[data-layout="wide"] .arc-side { grid-area: side; }
+html[data-layout="wide"] .arc-main { grid-area: main; }
+html[data-layout="wide"] .arc-bottom { grid-area: ctl; align-self: start; }
+html[data-layout="wide"] .arc-options { gap: 12px; grid-template-columns: repeat(4, 1fr); }
+html[data-layout="wide"] .arc-top { margin-bottom: 10px; }
+@media (max-height: 560px) {
+  html[data-layout="wide"] #page-arcade { padding: 8px 16px; }
+}
+
+/* tall: one column, controls pinned to the bottom */
+html[data-layout="tall"] #page-arcade { padding: 10px 12px 0; }
+html[data-layout="tall"] .arc-cards { grid-template-columns: 1fr; }
+html[data-layout="tall"] .arc-card { padding: 14px; }
+html[data-layout="tall"] .arc-card .btn-primary { align-self: stretch; }
+html[data-layout="tall"] .arc-stats { margin-left: 0; width: 100%; justify-content: space-between; }
+html[data-layout="tall"] .arc-clue { padding: 10px 12px; }
+html[data-layout="tall"] .arc-clue-row { font-size: 0.82rem; }
+html[data-layout="tall"] .arc-clue-row b { font-size: 1.1rem; }
+html[data-layout="tall"] .arc-msg { margin-top: 8px; font-size: 0.82rem; padding: 8px 10px; }
+html[data-layout="tall"] .arc-board-wrap { padding: 10px; }
+html[data-layout="tall"] .arc-bottom {
+  position: sticky; bottom: 0; z-index: 30; flex-wrap: nowrap; margin: 0 -12px;
+  padding: 8px 12px max(10px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--bg-deep) 12px);
+}
+html[data-layout="tall"] .arc-bottom > button { flex: 1; min-height: 46px; padding: 10px 6px; font-size: 0.85rem; white-space: nowrap; }
+html[data-layout="tall"] .arc-bottom > .btn-primary { flex: 1.4; }
+html[data-layout="tall"] .nav-btn { font-size: 0.72rem; padding: 10px 6px; white-space: nowrap; }
+
+/* Periodic table notation card: same layout as the data booklet cell */
+.pt-notation { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.pt-cell-demo { display: flex; flex-direction: column; align-items: center; text-align: center;
+  background: #fff; color: #000; border: 2px solid #9aa3ad; border-radius: 3px; min-width: 96px; padding: 6px 14px 5px;
+  font-family: Arial, Helvetica, sans-serif; line-height: 1.15; }
+.pcd-num  { font-size: 0.95rem; }
+.pcd-sym  { font-size: 1.9rem; font-weight: 700; }
+.pcd-name { font-size: 0.62rem; margin: 1px 0 2px; }
+.pcd-mass { font-size: 0.95rem; }
+.pt-key { display: flex; flex-direction: column; gap: 2px; font-size: 0.75rem; color: var(--text-muted); line-height: 1.3; }
+.pt-key b { color: #fff; font-size: 0.78rem; }
+.pt-key span:nth-of-type(1) { color: var(--accent); }
+.pt-key span:nth-of-type(2) { color: #fff; }
+.pt-key span:nth-of-type(4) { color: var(--warning); }
+.pt-pg { font-size: 0.85rem; margin-top: 8px; }
+
+/* ---- Main periodic table: laid out like the data booklet ---- */
+.periodic-grid { container-type: inline-size; gap: 3px; grid-template-columns: repeat(18, minmax(0, 1fr)); }
+.periodic-grid .pt-groups-bar, .periodic-grid .pt-group-num, .periodic-grid .pt-key-box {
+  background: #fff; color: #000; border: 1px solid #6b7280; border-radius: 2px;
+  font-family: Arial, Helvetica, sans-serif; text-align: center;
+}
+.pt-groups-bar { grid-row: 1; grid-column: 1 / -1; font-size: clamp(10px, 1.2cqw, 15px); padding: 2px 0; }
+.pt-group-num  { grid-row: 2; grid-column: var(--col); font-size: clamp(9px, 1.1cqw, 14px); padding: 2px 0; }
+.pt-key-box { grid-row: 4 / 6; grid-column: 4 / 9; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 1px; padding: 2px; font-size: clamp(7px, 1cqw, 12px); line-height: 1.15; }
+.pt-key-box b { font-size: 1.15em; }
+.pt-key-box .k-sym { font-size: 1.5em; }
+.pt-key-box .k-name { font-size: 0.8em; }
+
+.periodic-grid .pt-cell {
+  aspect-ratio: 1 / 1.08; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif;
+  border: 1px solid #6b7280; border-radius: 2px; padding: 1px; gap: 0; line-height: 1.1;
+}
+.periodic-grid .pt-num, .periodic-grid .pt-mass { align-self: center; padding: 0; opacity: 1; font-size: clamp(7px, 1.05cqw, 13px); }
+.periodic-grid .pt-sym  { font-size: clamp(12px, 2cqw, 24px); font-weight: 700; }
+.periodic-grid .pt-name { font-size: clamp(5px, 0.72cqw, 9px); opacity: 1; }
+.periodic-grid .pt-cell.state-locked    { background: #cfd4da; color: #5b6470; opacity: 1; }
+.periodic-grid .pt-cell.state-unlocked  { background: #eaf4fd; border: 3px solid var(--accent); }
+.periodic-grid .pt-cell.state-completed { background: #e7f6ec; border: 3px solid var(--success); }
+@container (max-width: 860px) { .periodic-grid .pt-name { display: none; } }
+
+html[data-layout="tall"] .periodic-grid .pt-cell { aspect-ratio: 1 / 1.12; }
+html[data-layout="tall"] .periodic-grid .pt-num,
+html[data-layout="tall"] .periodic-grid .pt-mass { display: block !important; font-size: 0.6rem !important; }
+html[data-layout="tall"] .periodic-grid .pt-sym  { font-size: 1.15rem !important; }
+html[data-layout="tall"] .pt-group-num { grid-column: var(--col-tall); font-size: 0.65rem; }
+html[data-layout="tall"] .pt-key-box { display: none; }
+html[data-layout="tall"] .periodic-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+
+/* ---- Elements that are not assessed: deeper grey, not clickable ---- */
+.periodic-grid .pt-cell { grid-row: var(--row); }
+.periodic-grid .pt-extra { background: #838d99; color: #111; border: 1px solid #6b7280; pointer-events: none; cursor: default; }
+.periodic-grid .pt-extra:hover { transform: none; box-shadow: none; }
+.periodic-grid .pt-range .pt-num { font-size: clamp(7px, 1.05cqw, 13px); }
+.periodic-grid .pt-range .pt-name { font-size: clamp(5px, 0.8cqw, 10px); }
+.pt-group-num.pt-extra-only { grid-row: 2; background: #838d99; color: #111; border-color: #6b7280; }
+.pt-f-label { grid-column: 1 / 3; text-align: right; align-self: center; padding-right: 8px;
+  color: var(--text-muted); font-size: clamp(9px, 1cqw, 13px); }
+.pt-rest { display: none; }
+.pt-extra-only.pt-f-label { grid-column: 1 / 3; }
+
+/* phones: show the assessed table large, the whole table small underneath */
+html[data-layout="tall"] .periodic-grid .pt-cell { grid-row: var(--row-tall); }
+html[data-layout="tall"] .pt-extra-only { display: none !important; }
+html[data-layout="tall"] .pt-rest { display: block; margin: 0 auto 18px; max-width: 440px; }
+.pt-rest summary { cursor: pointer; font-size: 0.78rem; color: var(--text-blue); padding: 6px 0; text-align: center; }
+.periodic-mini { display: grid; grid-template-columns: repeat(18, minmax(0, 1fr)); gap: 2px; margin-top: 6px; }
+.mini-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 0.5rem;
+  font-weight: 700; border-radius: 2px; font-family: Arial, Helvetica, sans-serif; }
+.mini-assessed { background: #fff; color: #000; border: 1px solid #6b7280; }
+.mini-extra { background: #838d99; color: #111; }
+.mini-key { color: var(--text-muted); font-weight: 400; }
+
+/* ---- Booklet look: white page, thin black lines, cells share borders ---- */
+#page-table { background: #fff; color: #000; border-radius: 0; max-width: 1400px; margin: 0 auto; }
+.pt-booktitle { text-align: center; font-family: Arial, Helvetica, sans-serif; font-size: 1.25rem; color: #000; margin: 4px 0 8px; }
+#page-table .pt-title { color: #333; }
+#page-table .legend { color: #333; }
+#page-table .legend-dot { border: 1px solid #000; }
+html .periodic-grid, html[data-layout="wide"] .periodic-grid, html[data-layout="tall"] .periodic-grid { gap: 0; padding: 0 1px 1px 0; }
+.periodic-mini { gap: 0; padding: 0 1px 1px 0; }
+.periodic-mini > * { margin: 0 -1px -1px 0; }
+.periodic-grid > * { margin: 0 -1px -1px 0; }
+.periodic-grid .pt-groups-bar, .periodic-grid .pt-group-num, .periodic-grid .pt-key-box,
+.periodic-grid .pt-cell { border: 1px solid #000; border-radius: 0; }
+.periodic-grid .pt-cell.state-unlocked  { border: 3px solid var(--accent); position: relative; z-index: 1; }
+.periodic-grid .pt-cell.state-completed { border: 3px solid var(--success); position: relative; z-index: 1; }
+.periodic-grid .pt-extra, .pt-group-num.pt-extra-only { border: 1px solid #000; }
+.pt-key-box { border-color: #000 !important; }
+.pt-f-label { color: #000; font-family: Arial, Helvetica, sans-serif; }
+.pt-footnote { font-family: Arial, Helvetica, sans-serif; font-size: 0.78rem; color: #000; margin: 14px 0 0; line-height: 1.5; }
+.pt-rest summary { color: #1d4f8c; }
+.mini-assessed { border: 1px solid #000; }
+.mini-cell { border-radius: 0; }
+html[data-layout="tall"] #page-table { padding: 14px 10px; }
+.mini-extra { border: 1px solid #000; }
+html[data-layout="tall"] .pt-footnote { font-size: 0.68rem; }
+
+/* ---- Phones: one single full table with the full notation; zoom slider sets the cell size ---- */
+html[data-layout="tall"] .periodic-grid { grid-template-columns: repeat(18, minmax(0, 1fr)); max-width: none; }
+html[data-layout="tall"] .periodic-grid .pt-cell { grid-column: var(--col); grid-row: var(--row); aspect-ratio: 1 / 1.08; padding: 0; }
+html[data-layout="tall"] .pt-extra-only { display: flex !important; }
+html[data-layout="tall"] .pt-group-num { grid-column: var(--col); font-size: clamp(9px, 1.1cqw, 14px); padding: 2px 0; }
+html[data-layout="tall"] .pt-group-num.pt-extra-only { display: block !important; grid-row: 2; }
+html[data-layout="tall"] .pt-groups-bar { font-size: clamp(10px, 1.2cqw, 15px); }
+html[data-layout="tall"] .periodic-grid .pt-num,
+html[data-layout="tall"] .periodic-grid .pt-mass { display: block !important; font-size: clamp(7px, 1.05cqw, 13px) !important; }
+html[data-layout="tall"] .periodic-grid .pt-sym { font-size: clamp(12px, 2cqw, 24px) !important; }
+html[data-layout="tall"] .periodic-grid .pt-cell.state-unlocked,
+html[data-layout="tall"] .periodic-grid .pt-cell.state-completed { border-width: 3px; }
+html[data-layout="tall"] .pt-range .pt-num { font-size: clamp(7px, 1.05cqw, 13px) !important; }
+html[data-layout="tall"] .pt-f-label { font-size: clamp(9px, 1cqw, 13px); }
+html[data-layout="tall"] .pt-rest { display: none !important; }
+html[data-layout="tall"] .pt-key-box { display: flex; }
+
+/* zoom slider + scroll wrapper */
+.pt-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.pt-scroll .periodic-grid { margin: 0 auto; }
+.pt-zoom { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 auto 12px;
+  font-family: Arial, Helvetica, sans-serif; font-size: 0.8rem; color: #000; max-width: 420px; }
+.pt-zoom input { flex: 1; min-width: 0; accent-color: #2f80ed; height: 28px; }
+.pt-zoom output { min-width: 3.2em; text-align: right; }
+html[data-layout="wide"] .pt-scroll .periodic-grid { max-width: none; }
+.periodic-grid .pt-group-num.pt-extra-only { background: #fff; color: #000; }
+
+/* ---- Explorer text size slider: scales the text panels, never the drag diagram ---- */
+#page-learn { --lt: 1; }
+#page-learn .back-btn, #page-learn .element-badge, #page-learn .info-grid, #page-learn .notation-row,
+#page-learn .diagram-title, #page-learn .sym-toggle, #page-learn .dnd-title, #page-learn .dnd-subtitle,
+#page-learn .dnd-feedback, #page-learn .dnd-controls, #page-learn .element-nav { zoom: var(--lt); }
+#static-diagram { padding-bottom: calc(10px + 24px * (var(--lt) - 1)); }
+.learn-zoom { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 0.75rem;
+  color: var(--text-muted); white-space: nowrap; }
+.learn-zoom input { width: 120px; accent-color: var(--accent); height: 28px; }
+.learn-zoom output { min-width: 3em; text-align: right; color: var(--text-main); }
+html[data-layout="tall"] .learn-header { flex-wrap: wrap; }
+html[data-layout="tall"] .learn-zoom { margin-left: 0; flex: 1 0 100%; justify-content: center; }
+html[data-layout="tall"] .learn-zoom input { flex: 1; width: auto; max-width: 240px; }
+html[data-layout="tall"] #page-learn .dnd-controls { flex-wrap: wrap; justify-content: center; }
+
+/* ---- Explorer: nuclide + periodic table notation side by side (half width each) ---- */
+#page-learn .notation-row { display: grid !important; grid-template-columns: 1fr 1fr; gap: 10px; overflow: visible; }
+#page-learn .notation-row > .notation-card { min-width: 0; width: auto; flex: none; }
+#page-learn .notation-row > .notation-card:nth-child(n+3) { grid-column: 1 / -1; }
+html[data-layout="tall"] #page-learn .notation-card { padding: 10px 10px; }
+
+/* electron arrangement line: sits below the diagram in normal flow */
+#ea-count { position: static !important; transform: none !important; text-align: center; margin: 10px auto 0; white-space: normal !important; }
+#static-diagram { padding-bottom: 14px !important; }
+.nota-compare { line-height: 1.5; }
+.nota-compare b { color: var(--text-main); }
+.nota-flip { display: block; margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: rgba(243,156,18,0.12);
+  border-left: 3px solid var(--warning); color: var(--text-main); }
+.notation-card h3 + .nota-compare { margin: 0 0 10px; }
+
+/* ---- Element badge styled as periodic table notation ---- */
+#page-learn .element-badge { background: #fff; border: 2px solid #000; border-radius: 2px; color: #000;
+  font-family: Arial, Helvetica, sans-serif; display: flex; flex-direction: column; align-items: center;
+  padding: 4px 14px; min-width: 76px; line-height: 1.1; box-shadow: none; }
+#page-learn .element-badge .num, #page-learn .element-badge .mass { font-size: 0.85rem; color: #000; }
+#page-learn .element-badge .sym  { font-size: 1.9rem; font-weight: 700; color: #000; }
+#page-learn .element-badge .name { font-size: 0.62rem; color: #000; margin: 0; }
+
+/* ---- Right column: diagram + period/group box (same width) ---- */
+.learn-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+html[data-layout="wide"] .learn-right { grid-area: diag; }
+html[data-layout="wide"] #static-diagram, html[data-layout="wide"] #dnd-area { position: static; }
+html[data-layout="tall"] .learn-right { order: 3; gap: 10px; }
+#pg-card { margin: 0; }
+#pg-card .pg-values { display: flex; gap: 28px; font-size: 1.05rem; color: var(--text-muted); margin: 4px 0 6px; }
+#pg-card .pg-values strong { color: #fff; font-size: 1.3rem; }
+#page-learn #pg-card { zoom: var(--lt); }
+html[data-layout="tall"] #pg-card { order: 9; }
+
+/* ---- Hint beside the build (oxygen shows nitrogen) ---- */
+.dnd-ref { border: 1px dashed rgba(170,212,245,0.45); border-radius: 10px; padding: 10px; margin-top: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; }
+html[data-layout="wide"] .dnd-ref { grid-area: ref; align-self: start; }
+.dnd-ref-title { font-size: 0.8rem; color: var(--text-blue); text-align: center; }
+.dnd-ref-ea { font-size: 0.75rem; color: var(--text-muted); text-align: center; }
+.dnd-ref .dnd-ref-canvas { width: 250px !important; max-width: 100%; height: auto !important; aspect-ratio: 1; margin: 0 auto !important; }
+html[data-layout="tall"] .dnd-ref .dnd-ref-canvas { width: 240px !important; }
+#page-learn .dnd-ref-title, #page-learn .dnd-ref-ea { zoom: var(--lt); }
+.rebuild-btn { display: block; margin: 4px auto 0; }
+#ea-text.ea-hidden { color: var(--text-muted); opacity: .75; }
+</style>
+
+
+</head>
+<body>
+
+<!-- ============================================================
+     SECTION 2a — Header & Navigation
+     ============================================================ -->
+<header>
+  <h1>⚛️ Atomic Structure Explorer</h1>
+  <nav>
+    <button class="nav-btn active" id="btn-table"
+            onclick="showPage('table')">🔬 Periodic Table</button>
+    <button class="nav-btn" id="btn-revision"
+            onclick="showPage('revision')">📝 Revision Quiz</button>
+    <button class="nav-btn" id="btn-arcade"
+            onclick="showPage('arcade')">🎮 Arcade</button>
+  </nav>
+</header>
+
+<!-- Toast notification -->
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- ============================================================
+     SECTION 2b — Periodic Table Page
+     ============================================================ -->
+<div id="page-table">
+
+  <h2 class="pt-booktitle">The Periodic Table of Elements</h2>
+  <p class="pt-title">
+    Click on an element to explore its atomic structure.
+    Complete them in order to unlock the next!
+  </p>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#fff;border:2px solid #6b7280;opacity:0.5"></div>
+      Locked
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#eaf4fd;border:2px solid #3498db"></div>
+      Unlocked
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#e7f6ec;border:2px solid #27ae60"></div>
+      Completed
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#838d99;border:2px solid #6b7280"></div>
+      Not assessed
+    </div>
+  </div>
+
+  <!-- Periodic table grid — populated by JS renderPeriodicTable() -->
+  <label class="pt-zoom">Table size
+    <input type="range" id="pt-zoom" min="30" max="50" step="1" value="33" aria-label="Periodic table size">
+    <output id="pt-zoom-val">33%</output>
+  </label>
+  <div class="pt-scroll"><div class="periodic-grid" id="periodic-grid"></div></div>
+
+  <details class="pt-rest" open>
+    <summary>The full periodic table (grey elements are not assessed)</summary>
+    <div class="periodic-mini" id="periodic-mini"></div>
+  </details>
+
+  <p class="pt-footnote">The volume of one mole of any gas is 24&nbsp;dm<sup>3</sup> at room temperature and pressure (r.t.p.).<br>
+    The Avogadro constant, <i>L</i> = 6.02 × 10<sup>23</sup>&nbsp;mol<sup>−1</sup>.</p>
+
+  <div class="reset-wrap">
+    <button class="btn-secondary" id="btn-reset-progress" onclick="resetProgress()">↺ Reset progress</button>
+  </div>
+
+</div>
+<!-- end #page-table -->
+
+
+<!-- ============================================================
+     SECTION 2c — Learn Page
+     ============================================================ -->
+<div id="page-learn" style="display:none">
+
+  <!-- Learn page header: back button + element badge -->
+  <div class="learn-header">
+    <button class="back-btn" onclick="showPage('table')">← Back</button>
+    <div class="element-badge">
+      <div class="num"  id="learn-num"></div>
+      <div class="sym"  id="learn-sym"></div>
+      <div class="name" id="learn-name"></div>
+      <div class="mass" id="learn-mass"></div>
+    </div>
+    <label class="learn-zoom" title="Text size">Text size
+      <input type="range" id="learn-zoom" min="80" max="160" step="5" value="100" aria-label="Explorer text size">
+      <output id="learn-zoom-val">100%</output>
+    </label>
+  </div>
+
+  <!-- Notation Row -->
+  <div class="notation-row">
+
+    <!-- Nuclide Notation Card -->
+    <div class="notation-card">
+      <h3>Nuclide Notation</h3>
+      <p class="notation-footnote nota-compare">
+        <b>Top:</b> <span style="color:var(--warning)">nucleon (mass) number</span><br>
+        <b>Bottom:</b> <span style="color:var(--accent)">proton (atomic) number</span>
+      </p>
+      <div class="nuclide-display">
+        <div class="nuclide-scripts">
+          <span class="nuclide-mass"   id="nuclide-mass"></span>
+          <span class="nuclide-atomic" id="nuclide-atomic"></span>
+        </div>
+        <span id="nuclide-sym"></span>
+      </div>
+    </div>
+
+    <!-- Periodic Table Notation Card -->
+    <div class="notation-card">
+      <h3>Periodic Table Notation</h3>
+      <p class="notation-footnote nota-compare">
+        <b>Top:</b> <span style="color:var(--accent)">proton (atomic) number</span><br>
+        <b>Bottom:</b> <span style="color:var(--warning)">relative atomic mass</span>
+      </p>
+      <div style="font-size:0.85rem; color:#eee; line-height:2;"
+           id="pt-notation-text">
+      </div>
+    </div>
+
+    <!-- Electron Arrangement Card -->
+    <div class="notation-card">
+      <h3>Electron Arrangement</h3>
+      <div style="font-size:1.3rem; font-weight:700; color:var(--electron);
+                  letter-spacing:2px; margin-bottom:6px;"
+           id="ea-text">
+      </div>
+      <p class="notation-footnote" id="ea-note">
+        Electrons per shell, starting from the innermost shell
+      </p>
+    </div>
+
+  </div>
+  <!-- end notation-row -->
+
+  <!-- Info Grid: Protons / Electrons / Shells -->
+  <div class="info-grid">
+    <div class="info-box">
+      <div class="val" id="info-protons"></div>
+      <div class="lbl">Protons</div>
+    </div>
+    <div class="info-box">
+      <div class="val" id="info-electrons"></div>
+      <div class="lbl">Electrons</div>
+    </div>
+    <div class="info-box">
+      <div class="val" id="info-shells"></div>
+      <div class="lbl">Electron Shells</div>
+    </div>
+  </div>
+  <!-- end info-grid -->
+
+
+  <div class="learn-right">
+  <!-- Static Dot-and-Cross Diagram (elements 1–11) -->
+  <div class="diagram-area" id="static-diagram">
+    <div class="diagram-title">🔵 Electronic Arrangement</div>
+    <div class="sym-toggle"></div>
+    <!-- Atom canvas populated by JS drawDotAndCross() -->
+    <div class="atom-canvas" id="atom-canvas"></div>
+    <button class="btn-secondary rebuild-btn" id="btn-rebuild" style="display:none"
+            onclick="rebuildCurrent()">↺ Build it again</button>
+  </div>
+  <!-- end static-diagram -->
+
+  <!-- Drag-and-Drop Area (elements 12–20) -->
+  <div class="dnd-area" id="dnd-area" style="display:none">
+
+    <div class="dnd-title">🧩 Build the Electron Arrangement</div>
+    <div class="dnd-subtitle">
+      Drag electrons from the bank onto the shell circles — with a mouse, finger or stylus. Drag a placed electron to move it to another shell, or tap it to return it to the bank.
+    </div>
+
+    <div class="sym-toggle"></div>
+
+    <!-- Electron bank — populated by JS initDnD() -->
+    <div class="electron-bank" id="electron-bank">
+    </div>
+
+    <!-- Shell drop zones — populated by JS initDnD() -->
+    <div class="shell-drop-zones" id="shell-drop-zones">
+    </div>
+
+    <div class="dnd-bottom">
+    <!-- Feedback message -->
+    <div class="dnd-feedback" id="dnd-feedback"></div>
+
+    <!-- Controls -->
+    <div class="dnd-controls">
+      <button class="btn-primary"    onclick="checkDnD()">✔ Check Answer</button>
+      <button class="btn-secondary"  onclick="resetDnD()">↺ Reset</button>
+      <button class="btn-hint"       onclick="showHint()"
+              id="hint-btn">✨ Hint</button>
+    </div>
+    </div>
+
+    <!-- Related element shown beside the build as a hint (oxygen ← nitrogen) -->
+    <div class="dnd-ref" id="dnd-ref" style="display:none">
+      <div class="dnd-ref-title" id="dnd-ref-title"></div>
+      <div class="atom-canvas dnd-ref-canvas" id="dnd-ref-canvas"></div>
+      <div class="dnd-ref-ea" id="dnd-ref-ea"></div>
+    </div>
+
+  </div>
+  <!-- end dnd-area -->
+
+  <!-- Period and Group (same width as the diagram box) -->
+  <div class="notation-card" id="pg-card">
+    <h3>Period and Group</h3>
+    <div class="pg-values">
+      <span>Period: <strong id="pg-period"></strong></span>
+      <span>Group: <strong id="pg-group"></strong></span>
+    </div>
+    <p class="notation-footnote">
+      Period = number of electron shells
+      &nbsp;|&nbsp;
+      Group = electrons in outermost shell
+    </p>
+  </div>
+  </div>
+  <!-- end learn-right -->
+
+  <!-- Element navigation arrows -->
+  <div class="element-nav">
+    <button class="nav-arrow" id="btn-prev-element"
+            onclick="navigateElement(-1)">← Previous</button>
+    <button class="nav-arrow" id="btn-next-element"
+            onclick="navigateElement(1)">Next →</button>
+  </div>
+
+</div>
+<!-- end #page-learn -->
+
+
+<!-- ============================================================
+     SECTION 2e — Revision Quiz Page
+     ============================================================ -->
+<div id="page-revision" style="display:none">
+
+  <!-- Quiz header -->
+  <div class="revision-header">
+    <h2>📝 Revision Quiz</h2>
+    <p>Test your knowledge of atomic structure, nuclide notation, and electron arrangements.</p>
+  </div>
+
+  <!-- Quiz start screen -->
+  <div id="quiz-start" class="quiz-card">
+    <p class="q-text">
+      This quiz has <strong>10 questions</strong> covering the elements you have
+      studied. Questions include multiple choice, fill-in-the-blank, and
+      drag-and-drop electron arrangement tasks.
+    </p>
+    <ul style="font-size:0.85rem; color:var(--text-muted);
+               line-height:2; margin:0 0 18px 18px;">
+      <li>Results are shown at the <strong style="color:#fff">end</strong>
+          of the quiz</li>
+      <li>You may <strong style="color:#fff">retry once</strong>
+          if you are not happy with your score</li>
+      <li>You can <strong style="color:#fff">send your results</strong>
+          to your teacher after completing the quiz</li>
+    </ul>
+    <button class="btn-primary" onclick="startQuiz()">▶ Start Quiz</button>
+  </div>
+  <!-- end quiz-start -->
+
+  <!-- Quiz question area (hidden until quiz starts) -->
+  <div id="quiz-question-area" style="display:none">
+
+    <!-- Progress -->
+    <div class="quiz-meta">
+      <span id="quiz-progress-label">Question 1 of 10</span>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-bar-fill"
+           style="width:0%"></div>
+    </div>
+
+    <!-- Question card — inner content populated by JS renderQuestion() -->
+    <div class="quiz-card" id="quiz-card">
+
+      <!-- Question type badge -->
+      <div id="q-type-badge"></div>
+
+      <!-- Question text -->
+      <div class="q-text" id="q-text"></div>
+
+      <!-- MCQ options container -->
+      <div class="mcq-options" id="mcq-options" style="display:none"></div>
+
+      <!-- Fill-in-the-blank container -->
+      <div class="fill-inputs" id="fill-inputs" style="display:none"></div>
+
+      <!-- Quiz drag-and-drop container -->
+      <div id="quiz-dnd-container" style="display:none">
+        <div class="sym-toggle"></div>
+        <div class="quiz-dnd-bank"   id="quiz-dnd-bank"></div>
+        <div class="quiz-shell-zones" id="quiz-shell-zones"></div>
+      </div>
+
+    </div>
+    <!-- end quiz-card -->
+
+    <!-- Next / Submit button -->
+    <div class="quiz-next-wrap" style="display:flex; justify-content:flex-end; margin-top:4px;">
+      <button class="btn-primary" id="btn-next-question"
+              onclick="nextQuestion()">Next →</button>
+    </div>
+
+  </div>
+  <!-- end quiz-question-area -->
+
+  <!-- Results area (hidden until quiz is scored) -->
+  <div id="quiz-results-area" style="display:none"></div>
+  <!-- end quiz-results-area -->
+
+</div>
+<!-- end #page-revision -->
+
+
+<!-- ============================================================
+     SECTION 2f — Results Template
+     Note: This is a reusable template injected into
+     #quiz-results-area by JS renderResults().
+     The template below is hidden and cloned by JS.
+     ============================================================ -->
+<!-- ============================================================
+     ARCADE PAGE — three games that reinforce electron arrangements.
+     Clues are periodic-table notation only (symbol, name, period, group).
+     ============================================================ -->
+<div id="page-arcade" style="display:none">
+
+  <div id="arc-menu">
+    <div class="arc-head">
+      <h2>🎮 Arcade</h2>
+      <p>Play to master electron arrangements. Your clue is always the periodic table notation: symbol, name, period and group.</p>
+    </div>
+    <div class="arc-note" id="arc-pool-note"></div>
+    <div class="arc-cards">
+      <div class="arc-card">
+        <h3>🩺 Atom Doctor</h3>
+        <p>An atom has its electrons in the wrong shells. Drag them to the right ones in as few moves as you can. 5 patients, up to 3 stars each.</p>
+        <div class="arc-best" id="arc-best-doctor"></div>
+        <button class="btn-primary" onclick="arcStart('doctor')">▶ Play</button>
+      </div>
+      <div class="arc-card">
+        <h3>🔎 Mystery Element</h3>
+        <p>You get a period and a group. Pick the electron arrangement that matches. 8 questions, 3 lives, bonus for streaks.</p>
+        <div class="arc-best" id="arc-best-mystery"></div>
+        <button class="btn-primary" onclick="arcStart('mystery')">▶ Play</button>
+      </div>
+      <div class="arc-card">
+        <h3>⚡ Blitz</h3>
+        <p>Build the arrangement from scratch against the clock. Tap a circle to add an electron, tap an electron to remove it. 60 seconds.</p>
+        <div class="arc-best" id="arc-best-blitz"></div>
+        <button class="btn-primary" onclick="arcStart('blitz')">▶ Play</button>
+      </div>
+    </div>
+    <div class="arc-head"><h3 style="font-size:0.95rem;color:var(--text-blue)">Badges</h3></div>
+    <div class="arc-badges" id="arc-badges"></div>
+  </div>
+
+  <div id="arc-game" style="display:none">
+    <div class="arc-top">
+      <button class="back-btn" onclick="arcExit()">← Arcade</button>
+      <div class="arc-title" id="arc-title"></div>
+      <div class="arc-stats" id="arc-stats"></div>
+    </div>
+    <div class="arc-timer" id="arc-timer-wrap"><div id="arc-timer-fill"></div></div>
+    <div class="arc-grid">
+      <div class="arc-side">
+        <div class="arc-clue" id="arc-clue"></div>
+        <div class="arc-msg" id="arc-msg" role="status" aria-live="polite"></div>
+        <div class="sym-toggle"></div>
+      </div>
+      <div class="arc-main">
+        <div class="diagram-area arc-board-wrap" id="arc-board-wrap">
+          <div class="quiz-shell-zones" id="arc-board"></div>
+        </div>
+        <div class="arc-options" id="arc-options"></div>
+      </div>
+      <div class="arc-bottom" id="arc-controls"></div>
+    </div>
+  </div>
+
+  <div id="arc-result" style="display:none"></div>
+</div>
+
+<template id="results-template">
+
+  <div class="results-card">
+
+    <h2>🎉 Quiz Complete!</h2>
+
+    <!-- Score circle -->
+    <div class="score-circle" id="res-score-circle">
+      <div class="score-num" id="res-score-num"></div>
+      <div class="score-lbl">out of 10</div>
+    </div>
+
+    <!-- Grade label -->
+    <div class="score-grade" id="res-grade"></div>
+
+    <!-- Retry button -->
+    <div style="text-align:center; margin-bottom:20px;">
+      <button class="btn-warning" id="btn-retry"
+              onclick="retryQuiz()">↺ Retry Quiz</button>
+      <p style="font-size:0.72rem; color:var(--text-muted);
+                margin-top:6px;" id="retry-note"></p>
+    </div>
+
+    <!-- Question breakdown -->
+    <div class="results-breakdown">
+      <h3>Question Breakdown</h3>
+      <!-- Populated by JS renderResults() -->
+      <div id="res-breakdown-list"></div>
+    </div>
+
+    <!-- Email results section -->
+    <div class="email-section">
+      <h3>📧 Send Results to Your Teacher</h3>
+      <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:12px;">
+        Enter your name and your teacher's email address below.
+        This will open your email app with your results pre-filled —
+        just hit Send!
+      </p>
+      <div class="email-row">
+        <input type="text"
+               id="student-name"
+               placeholder="Your name"
+               autocomplete="name" />
+        <input type="email"
+               id="teacher-email"
+               placeholder="Teacher's email address"
+               autocomplete="email" />
+      </div>
+      <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-success" onclick="sendResults()">📤 Send Results</button>
+        <button class="btn-secondary" onclick="sendResults('copy')">📋 Copy Results</button>
+      </div>
+      <p class="send-note">
+        If your email app does not open (some browsers and embedded viewers
+        block it), use Copy Results and paste the text into an email.
+      </p>
+      <textarea id="results-text" readonly rows="8" hidden
+                aria-label="Results text to copy"></textarea>
+    </div>
+    <!-- end email-section -->
+
+  </div>
+  <!-- end results-card -->
+
+</template>
+<!-- end results-template -->
+
+
+<script>
+/* Unbiased Fisher–Yates shuffle, returned as a new array: arr.shuffled() */
+Object.defineProperty(Array.prototype, 'shuffled', {
+  value: function () {
+    const a = this.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  },
+  enumerable: false
+});
+
+/* Escape text before putting it into innerHTML */
+function esc(v) {
+  return String(v).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+/* Make a non-button element keyboard-activatable (click, Enter, Space) */
+function makeActivatable(el, fn) {
+  el.setAttribute('role', 'button');
+  if (!el.hasAttribute('aria-label')) el.setAttribute('aria-label', 'electron');
+  el.tabIndex = 0;
+  el.addEventListener('click', fn);
+  el.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      fn(ev);
+    }
+  });
+}
+/* ============================================================
+   SECTION 3a — Element Data Array
+   Each element object contains:
+   - z:      atomic number
+   - sym:    chemical symbol
+   - name:   element name
+   - mass:   mass number (most stable / common isotope)
+   - shells: electron arrangement array e.g. [2,8,1]
+   - group:  CSS class for periodic table cell colour
+   - period: row in periodic table (1–4)
+   - col:    column in periodic table grid (1–18)
+   - ptGroup: group number shown in periodic table notation
+   ============================================================ */
+const ELEMENTS = [
+  {
+    z: 1,  sym: 'H',  name: 'Hydrogen',
+    mass: 1,   shells: [1],
+    group: 'grp-nonmetal', period: 1, col: 1,  ptGroup: 1
+  },
+  {
+    z: 2,  sym: 'He', name: 'Helium',
+    mass: 4,   shells: [2],
+    group: 'grp-noble',    period: 1, col: 18, ptGroup: 18
+  },
+  {
+    z: 3,  sym: 'Li', name: 'Lithium',
+    mass: 7,   shells: [2,1],
+    group: 'grp-alkali',   period: 2, col: 1,  ptGroup: 1
+  },
+  {
+    z: 4,  sym: 'Be', name: 'Beryllium',
+    mass: 9,   shells: [2,2],
+    group: 'grp-alkaline', period: 2, col: 2,  ptGroup: 2
+  },
+  {
+    z: 5,  sym: 'B',  name: 'Boron',
+    mass: 11,  shells: [2,3],
+    group: 'grp-metalloid',    period: 2, col: 13, ptGroup: 13
+  },
+  {
+    z: 6,  sym: 'C',  name: 'Carbon',
+    mass: 12,  shells: [2,4],
+    group: 'grp-nonmetal', period: 2, col: 14, ptGroup: 14
+  },
+  {
+    z: 7,  sym: 'N',  name: 'Nitrogen',
+    mass: 14,  shells: [2,5],
+    group: 'grp-nonmetal', period: 2, col: 15, ptGroup: 15
+  },
+  {
+    z: 8,  sym: 'O',  name: 'Oxygen',
+    mass: 16,  shells: [2,6],
+    group: 'grp-nonmetal', period: 2, col: 16, ptGroup: 16
+  },
+  {
+    z: 9,  sym: 'F',  name: 'Fluorine',
+    mass: 19,  shells: [2,7],
+    group: 'grp-halogen',  period: 2, col: 17, ptGroup: 17
+  },
+  {
+    z: 10, sym: 'Ne', name: 'Neon',
+    mass: 20,  shells: [2,8],
+    group: 'grp-noble',    period: 2, col: 18, ptGroup: 18
+  },
+  {
+    z: 11, sym: 'Na', name: 'Sodium',
+    mass: 23,  shells: [2,8,1],
+    group: 'grp-alkali',   period: 3, col: 1,  ptGroup: 1
+  },
+  {
+    z: 12, sym: 'Mg', name: 'Magnesium',
+    mass: 24,  shells: [2,8,2],
+    group: 'grp-alkaline', period: 3, col: 2,  ptGroup: 2
+  },
+  {
+    z: 13, sym: 'Al', name: 'Aluminium',
+    mass: 27,  shells: [2,8,3],
+    group: 'grp-metal',    period: 3, col: 13, ptGroup: 13
+  },
+  {
+    z: 14, sym: 'Si', name: 'Silicon',
+    mass: 28,  shells: [2,8,4],
+    group: 'grp-metalloid', period: 3, col: 14, ptGroup: 14
+  },
+  {
+    z: 15, sym: 'P',  name: 'Phosphorus',
+    mass: 31,  shells: [2,8,5],
+    group: 'grp-nonmetal', period: 3, col: 15, ptGroup: 15
+  },
+  {
+    z: 16, sym: 'S',  name: 'Sulfur',
+    mass: 32,  shells: [2,8,6],
+    group: 'grp-nonmetal', period: 3, col: 16, ptGroup: 16
+  },
+  {
+    z: 17, sym: 'Cl', name: 'Chlorine',
+    mass: 35,  shells: [2,8,7],
+    group: 'grp-halogen',  period: 3, col: 17, ptGroup: 17
+  },
+  {
+    z: 18, sym: 'Ar', name: 'Argon',
+    mass: 40,  shells: [2,8,8],
+    group: 'grp-noble',    period: 3, col: 18, ptGroup: 18
+  },
+  {
+    z: 19, sym: 'K',  name: 'Potassium',
+    mass: 39,  shells: [2,8,8,1],
+    group: 'grp-alkali',   period: 4, col: 1,  ptGroup: 1
+  },
+  {
+    z: 20, sym: 'Ca', name: 'Calcium',
+    mass: 40,  shells: [2,8,8,2],
+    group: 'grp-alkaline', period: 4, col: 2,  ptGroup: 2
+  }
+];
+
+/* ============================================================
+   Shell capacity rules (standard Bohr model for first 20):
+   Shell 1 → max 2
+   Shell 2 → max 8
+   Shell 3 → max 8
+   Shell 4 → max 2 (for elements 19–20 only)
+   ============================================================ */
+const SHELL_MAX = [2, 8, 8, 2];
+
+/* ============================================================
+   Shell ring sizes for the dot-and-cross diagram (px diameter).
+   Indexed 0 = innermost shell.
+   ============================================================ */
+const SHELL_DIAMETERS = [80, 150, 220, 290];
+
+/* ============================================================
+   Shell ring colours (matching CSS ring-1 through ring-4)
+   ============================================================ */
+const SHELL_COLOURS = ['#e74c3c', '#3498db', '#27ae60', '#9b59b6'];
+
+
+/* ============================================================
+   SECTION 3b — App State Object
+   Tracks:
+   - unlockedUpTo:  index of the highest unlocked element (0-based)
+   - completed:     Set of element indices the student has finished
+   - currentIndex:  index of the element currently on the learn page
+   - quiz:          all quiz-related state
+   ============================================================ */
+const STATE = {
+  unlockedUpTo:  0,          // element index 0 = Hydrogen is unlocked at start
+  completed:     new Set(),  // indices of fully completed elements
+  currentIndex:  0,          // which element is currently loaded on learn page
+
+  quiz: {
+    questions:   [],         // array of question objects built by buildQuiz()
+    answers:     [],         // student's answers, one entry per question
+    currentQ:    0,          // index of the question currently displayed
+    score:       0,          // final score out of 10
+    attempts:    0,          // number of times quiz has been taken (max 2)
+    active:      false,      // true while a quiz attempt is in progress
+    finished:    false       // true once results are showing
+  }
+};
+
+/* ============================================================
+   Page visibility map — all page div IDs
+   ============================================================ */
+const PAGES = ['page-table', 'page-learn', 'page-revision', 'page-arcade'];
+
+/* ============================================================
+   showPage(pageKey)
+   Hides all pages, shows the requested one,
+   updates the active state on nav buttons.
+   pageKey: 'table' | 'learn' | 'revision'
+   ============================================================ */
+function showPage(pageKey) {
+  // Hide all pages
+  PAGES.forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+
+  // Show the requested page
+  const pageMap = {
+    table:    'page-table',
+    learn:    'page-learn',
+    revision: 'page-revision',
+    arcade:   'page-arcade'
+  };
+
+  const targetId = pageMap[pageKey];
+  if (targetId) {
+    document.getElementById(targetId).style.display = 'block';
+  }
+
+  // Update nav button active states
+  document.getElementById('btn-table').classList.toggle(
+    'active', pageKey === 'table'
+  );
+  document.getElementById('btn-revision').classList.toggle(
+    'active', pageKey === 'revision'
+  );
+
+  document.getElementById('btn-arcade').classList.toggle('active', pageKey === 'arcade');
+
+  // If navigating to revision, initialise the quiz start screen
+  if (pageKey === 'revision') {
+    initRevisionPage();
+  }
+  if (pageKey === 'arcade') arcadeOpen(); else arcadeLeave();
+}
+
+/* ============================================================
+   showToast(message, duration)
+   Shows a brief notification at the bottom of the screen.
+   message:  string to display
+   duration: ms to show (default 2500)
+   ============================================================ */
+let toastTimer = null;
+function showToast(message, duration = 2500) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), duration);
+}
+
+/* ============================================================
+   initRevisionPage()
+   Called whenever the student navigates to the revision page.
+   Shows the start screen if no quiz is active,
+   or resumes the current question if one is in progress.
+   ============================================================ */
+function initRevisionPage() {
+  const { quiz } = STATE;
+
+  // If a quiz is actively in progress, just re-render current question
+  if (quiz.active) {
+    document.getElementById('quiz-start').style.display          = 'none';
+    document.getElementById('quiz-question-area').style.display  = 'block';
+    document.getElementById('quiz-results-area').style.display   = 'none';
+    renderQuestion(quiz.currentQ);
+    return;
+  }
+
+  // If results are already showing, keep them visible
+  if (quiz.finished) {
+    document.getElementById('quiz-start').style.display          = 'none';
+    document.getElementById('quiz-question-area').style.display  = 'none';
+    document.getElementById('quiz-results-area').style.display   = 'block';
+    return;
+  }
+
+  // Default: show start screen
+  document.getElementById('quiz-start').style.display          = 'block';
+  document.getElementById('quiz-question-area').style.display  = 'none';
+  document.getElementById('quiz-results-area').style.display   = 'none';
+
+  // Update start screen to reflect how many elements are available
+  const available = STATE.completed.size;
+  const qText = document.querySelector('#quiz-start .q-text');
+  if (qText) {
+    qText.innerHTML = `
+      This quiz has <strong>10 questions</strong> covering the
+      <strong style="color:var(--accent)">${available}</strong>
+      element${available === 1 ? '' : 's'} you have studied so far.
+      Questions include multiple choice, fill-in-the-blank, and
+      drag-and-drop electron arrangement tasks.
+      <br><br>
+      <span style="color:var(--text-muted); font-size:0.82rem;">
+        Complete more elements on the Periodic Table page to unlock
+        more question variety.
+      </span>
+    `;
+  }
+}
+
+
+/* ============================================================
+   SECTION 4b — handleElementClick(index)
+   Called when a student clicks a cell on the periodic table.
+   - Blocks locked elements with a toast message
+   - Routes unlocked / completed elements to the learn page
+   ============================================================ */
+/* Elements students build themselves: oxygen (with nitrogen beside it as a hint) and Mg onwards */
+const BUILD_REFERENCE = { 7: 6 };            // oxygen → show nitrogen
+/* While a student is building, the answer stays hidden; it appears once the build is correct */
+function setEaCard(el, building) {
+  const t = document.getElementById('ea-text'), n = document.getElementById('ea-note');
+  if (building) {
+    t.textContent = el.shells.map(() => '?').join(' , ');
+    t.classList.add('ea-hidden');
+    n.textContent = 'Build it to reveal the answer';
+  } else {
+    t.textContent = el.shells.join(' , ');
+    t.classList.remove('ea-hidden');
+    n.textContent = 'Electrons per shell, starting from the innermost shell';
+  }
+}
+function rebuildCurrent() {
+  STATE.rebuilding = true;
+  loadLearnPage(STATE.currentIndex);
+}
+function isBuildElement(index) { return index >= 11 || index in BUILD_REFERENCE; }
+
+function handleElementClick(index) {
+  // Block locked elements
+  if (index > STATE.unlockedUpTo && !STATE.completed.has(index)) {
+    const prevEl = ELEMENTS[index - 1];
+    showToast(`🔒 Complete ${prevEl.sym} first to unlock this element!`);
+    return;
+  }
+
+  // Load the learn page for this element
+  STATE.currentIndex = index;
+  loadLearnPage(index);
+  showPage('learn');
+}
+
+/* ============================================================
+   SECTION 5a — loadLearnPage(index)
+   Populates all content on the learn page for a given element:
+   - Element badge (symbol + name)
+   - Nuclide notation card
+   - Periodic table notation card
+   - Electron arrangement card
+   - Info grid (protons, electrons, shells)
+   - Decides whether to show static diagram or DnD area
+   - Updates prev/next navigation arrow states
+   ============================================================ */
+function loadLearnPage(index) {
+  const el = ELEMENTS[index];
+
+  /* ── Element badge ───────────────────────────────────────── */
+  document.getElementById('learn-sym').textContent  = el.sym;
+  document.getElementById('learn-name').textContent = el.name.toLowerCase();
+  document.getElementById('learn-num').textContent  = el.z;
+  document.getElementById('learn-mass').textContent = el.sym === 'Cl' ? '35.5' : el.mass;
+
+  /* ── Nuclide notation card ───────────────────────────────── */
+  document.getElementById('nuclide-mass').textContent   = el.mass;
+  document.getElementById('nuclide-atomic').textContent = el.z;
+  document.getElementById('nuclide-sym').textContent    = el.sym;
+
+  /* ── Periodic table notation card ───────────────────────── */
+  const ptText = document.getElementById('pt-notation-text');
+  // Laid out like the periodic table in the data booklet: number / symbol / name / relative atomic mass
+  const ram = el.sym === 'Cl' ? '35.5' : String(el.mass);
+  ptText.innerHTML = `
+    <div class="pt-notation">
+      <div class="pt-cell-demo" aria-label="${el.name}: atomic number ${el.z}, relative atomic mass ${ram}">
+        <span class="pcd-num">${el.z}</span>
+        <span class="pcd-sym">${el.sym}</span>
+        <span class="pcd-name">${el.name.toLowerCase()}</span>
+        <span class="pcd-mass">${ram}</span>
+      </div>
+      <div class="pt-key">
+        <b>Key</b>
+        <span>proton (atomic) number</span>
+        <span>atomic symbol</span>
+        <span>name</span>
+        <span>relative atomic mass</span>
+      </div>
+    </div>
+  `;
+  document.getElementById('pg-period').textContent = el.period;
+  document.getElementById('pg-group').textContent  = el.ptGroup;
+
+  /* ── Electron arrangement card ───────────────────────────── */
+  document.getElementById('ea-text').textContent = el.shells.join(' , ');
+
+  /* ── Info grid ───────────────────────────────────────────── */
+  document.getElementById('info-protons').textContent   = el.z;
+  document.getElementById('info-electrons').textContent = el.z;
+  document.getElementById('info-shells').textContent    = el.shells.length;
+
+  /* ── Static diagram vs DnD ───────────────────────────────── */
+  const staticArea = document.getElementById('static-diagram');
+  const dndArea    = document.getElementById('dnd-area');
+
+  if (!isBuildElement(index)) {
+    // Elements the students only view: show static dot-and-cross diagram
+    staticArea.style.display = 'block';
+    dndArea.style.display    = 'none';
+    drawDotAndCross(el);
+  } else {
+    // Elements 12–20: show drag-and-drop area
+    staticArea.style.display = 'none';
+    dndArea.style.display    = 'block';
+
+    // Only initialise DnD if not already completed
+    // (if completed, show the static diagram as reference instead)
+    if (STATE.completed.has(index) && !STATE.rebuilding) {
+      staticArea.style.display = 'block';
+      dndArea.style.display    = 'none';
+      drawDotAndCross(el);
+    } else {
+      initDnD(el);
+    }
+  }
+
+  STATE.rebuilding = false;
+  setEaCard(el, dndArea.style.display === 'block');
+  document.getElementById('btn-rebuild').style.display =
+    (isBuildElement(index) && staticArea.style.display === 'block') ? '' : 'none';
+
+  /* ── Hint beside the build: a related element's arrangement ─ */
+  const ref = document.getElementById('dnd-ref');
+  const refIndex = BUILD_REFERENCE[index];
+  if (ref && refIndex !== undefined) {
+    const r = ELEMENTS[refIndex];
+    document.getElementById('dnd-ref-title').textContent = `Hint: ${r.name.toLowerCase()} (${r.sym}) has one electron fewer`;
+    document.getElementById('dnd-ref-ea').textContent = `Electron arrangement/configuration: ${r.shells.join(', ')}`;
+    drawDotAndCross(r, 'dnd-ref-canvas', false);
+    ref.style.display = '';
+  } else if (ref) {
+    ref.style.display = 'none';
+  }
+
+  STATE.navReadyAt = Date.now() + 5000;    // next-element button waits 5 s
+
+  /* ── Navigation arrows ───────────────────────────────────── */
+  updateLearnNav(index);
+
+  // Elements 1–11 count as completed once viewed
+  if (!isBuildElement(index) && !STATE.completed.has(index)) {
+    setTimeout(() => markElementViewed(index), 800);
+  }
+}
+
+/* ============================================================
+   updateLearnNav(index)
+   Enables or disables the prev/next arrows on the learn page
+   based on which elements are accessible.
+   ============================================================ */
+function updateLearnNav(index) {
+  const btnPrev = document.getElementById('btn-prev-element');
+  const btnNext = document.getElementById('btn-next-element');
+
+  // Previous: always available unless on first element
+  btnPrev.disabled = (index === 0);
+
+  // Next: available if the next element is unlocked or completed,
+  // and we are not already on the last element
+  const nextIndex = index + 1;
+  const nextExists    = nextIndex < ELEMENTS.length;
+  const nextAccessible = nextExists && (
+    nextIndex <= STATE.unlockedUpTo ||
+    STATE.completed.has(nextIndex)
+  );
+
+  const wait = Math.ceil(((STATE.navReadyAt || 0) - Date.now()) / 1000);
+  btnNext.disabled = !nextAccessible || wait > 0;
+  clearTimeout(updateLearnNav._t);
+  if (nextAccessible && wait > 0) {
+    btnNext.textContent = `${ELEMENTS[nextIndex].sym} → (${wait})`;
+    updateLearnNav._t = setTimeout(() => { if (STATE.currentIndex === index) updateLearnNav(index); }, 250);
+    return;
+  }
+
+  // Update button labels to show element name
+  if (index > 0) {
+    btnPrev.textContent = `← ${ELEMENTS[index - 1].sym}`;
+  } else {
+    btnPrev.textContent = '← Previous';
+  }
+
+  if (nextAccessible) {
+    btnNext.textContent = `${ELEMENTS[nextIndex].sym} →`;
+  } else {
+    btnNext.textContent = 'Next →';
+  }
+}
+
+/* ============================================================
+   navigateElement(direction)
+   Called by the prev/next arrow buttons.
+   direction: -1 (previous) or +1 (next)
+   ============================================================ */
+function navigateElement(direction) {
+  const newIndex = STATE.currentIndex + direction;
+
+  // Bounds check
+  if (newIndex < 0 || newIndex >= ELEMENTS.length) return;
+
+  // Access check
+  const accessible = newIndex <= STATE.unlockedUpTo ||
+                     STATE.completed.has(newIndex);
+  if (!accessible) {
+    showToast(`🔒 Complete ${ELEMENTS[newIndex - 1].sym} first!`);
+    return;
+  }
+
+  STATE.currentIndex = newIndex;
+  loadLearnPage(newIndex);
+}
+
+
+/* ============================================================
+   SECTION 5b — drawDotAndCross(el)
+   Draws a static dot-and-cross Bohr model diagram for a given
+   element using absolutely positioned divs inside .atom-canvas.
+   - Draws concentric dashed shell rings
+   - Places electron dots evenly spaced around each ring
+   - Draws the nucleus in the centre
+   el: element object from ELEMENTS array
+   ============================================================ */
+function drawDotAndCross(el, canvasId = 'atom-canvas', withLabel = true) {
+  const canvas = document.getElementById(canvasId);
+  canvas.innerHTML = '';
+
+  const SIZE = 300;                         // logical coordinate space
+  const pct  = v => `${(v / SIZE) * 100}%`;
+  const c    = SIZE / 2;
+
+  el.shells.forEach((count, shellIndex) => {
+    const diameter = SHELL_DIAMETERS[shellIndex];
+    const radius   = diameter / 2;
+    const colour   = SHELL_COLOURS[shellIndex];
+
+    const ring = document.createElement('div');
+    ring.className   = `shell-ring ring-${shellIndex + 1}`;
+    ring.style.width = pct(diameter);
+    ring.style.aspectRatio = '1';
+    ring.style.borderColor = colour;
+    canvas.appendChild(ring);
+
+    const slots = electronSlots(count, shellIndex);
+    for (let i = 0; i < count; i++) {
+      const angleRad = (slots[i].angle * Math.PI) / 180;
+      const tx = (-Math.sin(angleRad) * slots[i].side * 0.31).toFixed(3);
+      const ty = ( Math.cos(angleRad) * slots[i].side * 0.31).toFixed(3);
+      const dot = document.createElement('div');
+      dot.className  = 'electron-dot';
+      // a pair is two marks side by side: shift each along the ring
+      dot.style.left = `calc(${pct(c + radius * Math.cos(angleRad))} + var(--e) * ${tx})`;
+      dot.style.top  = `calc(${pct(c + radius * Math.sin(angleRad))} + var(--e) * ${ty})`;
+
+      canvas.appendChild(dot);
+    }
+
+  });
+
+  const nucleus = document.createElement('div');
+  nucleus.className = 'nucleus';
+  nucleus.innerHTML = `
+    <div style="text-align:center; line-height:1.3;">
+      <div style="font-size:0.65rem; color:#faa;">${el.z}p</div>
+      <div style="font-size:0.55rem; color:#adf;">${el.mass - el.z}n</div>
+    </div>`;
+  canvas.appendChild(nucleus);
+
+  const countLabel = document.createElement('div');
+  countLabel.style.position   = 'absolute';
+  countLabel.style.bottom     = 'calc(-24px * var(--lt, 1))';
+  countLabel.style.left       = '50%';
+  countLabel.style.transform  = 'translateX(-50%)';
+  countLabel.className        = 'ea-count';
+  countLabel.style.fontSize   = 'calc(0.72rem * var(--lt, 1))';
+  countLabel.style.color      = 'var(--text-muted)';
+  countLabel.style.whiteSpace = 'nowrap';
+  countLabel.innerHTML =
+    `Electron arrangement/configuration: <span style="white-space:nowrap">${el.shells.join(', ')}</span>`;
+  if (!withLabel) return;
+  countLabel.id = 'ea-count';
+  const oldCount = document.getElementById('ea-count'); if (oldCount) oldCount.remove();
+  canvas.insertAdjacentElement('afterend', countLabel);   // below the diagram, never on a ring or border
+}
+
+/* ============================================================
+   SECTION 5c — unlockNext(index)
+   Called when a student successfully completes an element
+   (either by viewing elements 1–11, or correctly completing
+   the DnD for elements 12–20).
+   - Marks the element as completed in STATE
+   - Unlocks the next element if one exists
+   - Updates the periodic table cell states
+   - Shows a congratulatory toast
+   - Enables the next navigation arrow
+   ============================================================ */
+function unlockNext(index, silent) {
+  // Mark current element as completed
+  STATE.completed.add(index);
+
+  // Update this cell's appearance on the periodic table
+  updateCellState(index);
+
+  const nextIndex = index + 1;
+  const isLastElement = nextIndex >= ELEMENTS.length;
+
+  if (!isLastElement) {
+    // Unlock the next element if not already unlocked
+    if (nextIndex > STATE.unlockedUpTo) {
+      STATE.unlockedUpTo = nextIndex;
+    }
+
+    // Update next cell's appearance on the periodic table
+    updateCellState(nextIndex);
+
+    // Toast message
+    const nextEl = ELEMENTS[nextIndex];
+    if (!silent) showToast(
+      `✅ ${ELEMENTS[index].sym} complete! ${nextEl.sym} — ${nextEl.name} is now unlocked!`,
+      3000
+    );
+  } else if (!silent) {
+    // Student has completed all 20 elements
+    showToast(
+      `🎉 Amazing! You have completed all 20 elements!`,
+      3500
+    );
+  }
+
+  saveProgress();
+
+  // Refresh nav arrows for the element currently on screen
+  updateLearnNav(STATE.currentIndex);
+}
+
+/* ============================================================
+   markElementViewed(index)
+   Called automatically when a student views a static diagram
+   (elements 1–11). Viewing counts as completing the element
+   since there is no interactive task for these elements.
+   Only triggers unlockNext() the first time it is viewed.
+   ============================================================ */
+function markElementViewed(index) {
+  // Only process if not already completed
+  if (STATE.completed.has(index)) return;
+
+  // Elements 1–11 are auto-completed on view
+  if (!isBuildElement(index)) {
+    unlockNext(index, true);
+  }
+}
+
+
+/* ============================================================
+   initApp()
+   Entry point — called on DOMContentLoaded.
+   Renders the periodic table and shows the table page.
+   ============================================================ */
+const STORAGE_KEY = 'atomicStructureExplorer.v1';
+
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      unlockedUpTo: STATE.unlockedUpTo,
+      completed: [...STATE.completed],
+      v: 2
+    }));
+  } catch (e) { /* storage unavailable — progress just won't persist */ }
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (Number.isInteger(d.unlockedUpTo) && Array.isArray(d.completed)) {
+      STATE.unlockedUpTo = Math.min(Math.max(0, d.unlockedUpTo), ELEMENTS.length - 1);
+      STATE.completed = new Set(
+        d.completed.filter(i => Number.isInteger(i) && i >= 0 && i < ELEMENTS.length)
+      );
+      // Saves from before oxygen became a build marked it complete just by viewing it:
+      // reopen it as a build (still unlocked) so students actually build it.
+      if (d.v !== 2) {
+        Object.keys(BUILD_REFERENCE).map(Number).forEach(i => {
+          if (STATE.completed.has(i)) { STATE.completed.delete(i); STATE.unlockedUpTo = Math.max(STATE.unlockedUpTo, i); }
+        });
+        saveProgress();
+      }
+    }
+  } catch (e) { /* ignore corrupt or unavailable storage */ }
+}
+
+function cellState(i) {
+  if (STATE.completed.has(i)) return 'completed';
+  if (i <= STATE.unlockedUpTo) return 'unlocked';
+  return 'locked';
+}
+
+const EXTRA_ELEMENTS = [   // [z, symbol, name, relative atomic mass, period, column]  (not assessed in this syllabus)
+  [21,'Sc','scandium','45',4,3],
+  [22,'Ti','titanium','48',4,4],
+  [23,'V','vanadium','51',4,5],
+  [24,'Cr','chromium','52',4,6],
+  [25,'Mn','manganese','55',4,7],
+  [26,'Fe','iron','56',4,8],
+  [27,'Co','cobalt','59',4,9],
+  [28,'Ni','nickel','59',4,10],
+  [29,'Cu','copper','64',4,11],
+  [30,'Zn','zinc','65',4,12],
+  [31,'Ga','gallium','70',4,13],
+  [32,'Ge','germanium','73',4,14],
+  [33,'As','arsenic','75',4,15],
+  [34,'Se','selenium','79',4,16],
+  [35,'Br','bromine','80',4,17],
+  [36,'Kr','krypton','84',4,18],
+  [37,'Rb','rubidium','85',5,1],
+  [38,'Sr','strontium','88',5,2],
+  [39,'Y','yttrium','89',5,3],
+  [40,'Zr','zirconium','91',5,4],
+  [41,'Nb','niobium','93',5,5],
+  [42,'Mo','molybdenum','96',5,6],
+  [43,'Tc','technetium','–',5,7],
+  [44,'Ru','ruthenium','101',5,8],
+  [45,'Rh','rhodium','103',5,9],
+  [46,'Pd','palladium','106',5,10],
+  [47,'Ag','silver','108',5,11],
+  [48,'Cd','cadmium','112',5,12],
+  [49,'In','indium','115',5,13],
+  [50,'Sn','tin','119',5,14],
+  [51,'Sb','antimony','122',5,15],
+  [52,'Te','tellurium','128',5,16],
+  [53,'I','iodine','127',5,17],
+  [54,'Xe','xenon','131',5,18],
+  [55,'Cs','caesium','133',6,1],
+  [56,'Ba','barium','137',6,2],
+  [72,'Hf','hafnium','178',6,4],
+  [73,'Ta','tantalum','181',6,5],
+  [74,'W','tungsten','184',6,6],
+  [75,'Re','rhenium','186',6,7],
+  [76,'Os','osmium','190',6,8],
+  [77,'Ir','iridium','192',6,9],
+  [78,'Pt','platinum','195',6,10],
+  [79,'Au','gold','197',6,11],
+  [80,'Hg','mercury','201',6,12],
+  [81,'Tl','thallium','204',6,13],
+  [82,'Pb','lead','207',6,14],
+  [83,'Bi','bismuth','209',6,15],
+  [84,'Po','polonium','–',6,16],
+  [85,'At','astatine','–',6,17],
+  [86,'Rn','radon','–',6,18],
+  [87,'Fr','francium','–',7,1],
+  [88,'Ra','radium','–',7,2],
+  [104,'Rf','rutherfordium','–',7,4],
+  [105,'Db','dubnium','–',7,5],
+  [106,'Sg','seaborgium','–',7,6],
+  [107,'Bh','bohrium','–',7,7],
+  [108,'Hs','hassium','–',7,8],
+  [109,'Mt','meitnerium','–',7,9],
+  [110,'Ds','darmstadtium','–',7,10],
+  [111,'Rg','roentgenium','–',7,11],
+  [112,'Cn','copernicium','–',7,12],
+  [113,'Nh','nihonium','–',7,13],
+  [114,'Fl','flerovium','–',7,14],
+  [115,'Mc','moscovium','–',7,15],
+  [116,'Lv','livermorium','–',7,16],
+  [117,'Ts','tennessine','–',7,17],
+  [118,'Og','oganesson','–',7,18]
+];
+const LANTHANOIDS = [
+  [57,'La','lanthanum','139'],
+  [58,'Ce','cerium','140'],
+  [59,'Pr','praseodymium','141'],
+  [60,'Nd','neodymium','144'],
+  [61,'Pm','promethium','–'],
+  [62,'Sm','samarium','150'],
+  [63,'Eu','europium','152'],
+  [64,'Gd','gadolinium','157'],
+  [65,'Tb','terbium','159'],
+  [66,'Dy','dysprosium','163'],
+  [67,'Ho','holmium','165'],
+  [68,'Er','erbium','167'],
+  [69,'Tm','thulium','169'],
+  [70,'Yb','ytterbium','173'],
+  [71,'Lu','lutetium','175']
+];
+const ACTINOIDS = [
+  [89,'Ac','actinium','–'],
+  [90,'Th','thorium','232'],
+  [91,'Pa','protactinium','231'],
+  [92,'U','uranium','238'],
+  [93,'Np','neptunium','–'],
+  [94,'Pu','plutonium','–'],
+  [95,'Am','americium','–'],
+  [96,'Cm','curium','–'],
+  [97,'Bk','berkelium','–'],
+  [98,'Cf','californium','–'],
+  [99,'Es','einsteinium','–'],
+  [100,'Fm','fermium','–'],
+  [101,'Md','mendelevium','–'],
+  [102,'No','nobelium','–'],
+  [103,'Lr','lawrencium','–']
+];
+
+function renderPeriodicTable() {
+  const grid = document.getElementById('periodic-grid');
+  grid.innerHTML = '';
+
+  // Header like the data booklet: a "Group" bar, then the group numbers
+  const bar = document.createElement('div');
+  bar.className = 'pt-groups-bar'; bar.textContent = 'Group';
+  grid.appendChild(bar);
+  [1, 2, 13, 14, 15, 16, 17, 18].forEach(g => {
+    const n = document.createElement('div');
+    n.className = 'pt-group-num'; n.textContent = g;
+    n.style.setProperty('--col', g);
+    n.style.setProperty('--col-tall', g <= 2 ? g : g - 10);
+    grid.appendChild(n);
+  });
+
+  // Key, in the empty space beside periods 2 and 3 (as in the booklet)
+  const key = document.createElement('div');
+  key.className = 'pt-key-box';
+  key.innerHTML = '<b>Key</b><span class="k-num">proton (atomic) number</span>' +
+                  '<span class="k-sym">atomic symbol</span><span class="k-name">name</span>' +
+                  '<span class="k-mass">relative atomic mass</span>';
+  grid.appendChild(key);
+
+  ELEMENTS.forEach((el, i) => {
+    const ram = el.sym === 'Cl' ? '35.5' : String(el.mass);   // relative atomic mass, as in the booklet
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.id = `pt-cell-${i}`;
+    cell.className = `pt-cell ${el.group}`;
+    cell.style.setProperty('--row', el.period <= 3 ? el.period + 2 : el.period + 3);
+    cell.style.setProperty('--row-tall', el.period + 2);
+    cell.style.setProperty('--col', el.sym === 'H' ? 8 : el.col);   // as in the data booklet, H sits in the middle
+    cell.style.setProperty('--col-tall', el.col <= 2 ? el.col : el.col - 10);
+    cell.innerHTML =
+      `<span class="pt-num">${el.z}</span>` +
+      `<span class="pt-sym">${el.sym}</span>` +
+      `<span class="pt-name">${el.name.toLowerCase()}</span>` +
+      `<span class="pt-mass">${ram}</span>`;
+    cell.addEventListener('click', () => handleElementClick(i));
+    grid.appendChild(cell);
+    updateCellState(i);
+  });
+
+  // ---- The rest of the table: shown in deeper grey, not assessed in this syllabus ----
+  [3, 4, 5, 6, 7, 8, 9, 10, 11, 12].forEach(g => {            // group numbers for the d-block
+    const n = document.createElement('div');
+    n.className = 'pt-group-num pt-extra-only'; n.textContent = g;
+    n.style.setProperty('--col', g); n.style.gridRow = 2;
+    grid.appendChild(n);
+  });
+  const extraCell = (parts, row, col) => {
+    const c = document.createElement('div');
+    c.className = 'pt-cell pt-extra pt-extra-only';
+    c.title = parts[1][0].toUpperCase() + parts[1].slice(1) + ': not assessed in this syllabus';
+    c.style.setProperty('--row', row); c.style.setProperty('--col', col);
+    c.innerHTML = `<span class="pt-num">${parts[0]}</span><span class="pt-sym">${parts[1]}</span>` +
+                  `<span class="pt-name">${parts[2]}</span><span class="pt-mass">${parts[3]}</span>`;
+    return c;
+  };
+  EXTRA_ELEMENTS.forEach(([z, sym, name, mass, period, col]) =>
+    grid.appendChild(extraCell([z, sym, name, mass], period + 3, col)));
+  [['57–71', 'lanthanoids', 9], ['89–103', 'actinoids', 10]].forEach(([range, label, row]) => {
+    const c = document.createElement('div');
+    c.className = 'pt-cell pt-extra pt-extra-only pt-range';
+    c.style.setProperty('--row', row); c.style.setProperty('--col', 3);
+    c.dataset.mark = label === 'lanthanoids' ? '*' : '†';
+    c.innerHTML = `<span class="pt-num">${range}</span><span class="pt-name">${label}</span>`;
+    grid.appendChild(c);
+  });
+  [['lanthanoids', LANTHANOIDS, 12], ['actinoids', ACTINOIDS, 13]].forEach(([label, list, row]) => {
+    const lab = document.createElement('div');
+    lab.className = 'pt-f-label pt-extra-only'; lab.textContent = label;
+    lab.style.gridRow = row;
+    grid.appendChild(lab);
+    list.forEach(([z, sym, name, mass], k) => grid.appendChild(extraCell([z, sym, name, mass], row, 3 + k)));
+  });
+
+  renderMiniTable();
+}
+
+/* Compact full table for phones (the 18-column grid is too wide for full-size cells) */
+function renderMiniTable() {
+  const mini = document.getElementById('periodic-mini');
+  if (!mini) return;
+  mini.innerHTML = '';
+  const add = (txt, row, col, cls) => {
+    const c = document.createElement('div');
+    c.className = 'mini-cell ' + cls; c.textContent = txt;
+    c.style.gridRow = row; c.style.gridColumn = col;
+    mini.appendChild(c);
+  };
+  ELEMENTS.forEach(el => add(el.sym, el.period, el.col, 'mini-assessed'));
+  EXTRA_ELEMENTS.forEach(([z, sym, name, mass, period, col]) => add(sym, period, col, 'mini-extra'));
+  add('*', 6, 3, 'mini-extra'); add('†', 7, 3, 'mini-extra');
+  LANTHANOIDS.forEach(([z, sym], k) => add(sym, 9, 3 + k, 'mini-extra'));
+  ACTINOIDS.forEach(([z, sym], k) => add(sym, 10, 3 + k, 'mini-extra'));
+  add('*', 9, 2, 'mini-key'); add('†', 10, 2, 'mini-key');
+}
+
+function updateCellState(i) {
+  const cell = document.getElementById(`pt-cell-${i}`);
+  if (!cell) return;
+  const st = cellState(i);
+  cell.classList.remove('state-locked', 'state-unlocked', 'state-completed');
+  cell.classList.add(`state-${st}`);
+  cell.setAttribute('aria-label',
+    `${ELEMENTS[i].name}, atomic number ${ELEMENTS[i].z}, ${st}`);
+}
+
+let resetArmed = false;
+let resetTimer = null;
+function resetProgress() {
+  const btn = document.getElementById('btn-reset-progress');
+  if (!resetArmed) {                       // two-click confirm (no confirm() dialogs)
+    resetArmed = true;
+    btn.textContent = 'Click again to confirm reset';
+    resetTimer = setTimeout(() => {
+      resetArmed = false;
+      btn.textContent = '↺ Reset progress';
+    }, 3000);
+    return;
+  }
+  clearTimeout(resetTimer);
+  resetArmed = false;
+  btn.textContent = '↺ Reset progress';
+  STATE.unlockedUpTo = 0;
+  STATE.completed = new Set();
+  STATE.currentIndex = 0;
+  Object.assign(STATE.quiz, {
+    questions: [], answers: [], currentQ: 0, score: 0,
+    attempts: 0, active: false, finished: false
+  });
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  renderPeriodicTable();
+  showToast('Progress reset.');
+}
+
+const SYMBOL_KEY = 'atomicStructureExplorer.symbol';
+
+/* Show every electron as a dot or as a cross */
+function setSymbol(sym, save = true) {
+  const cross = sym === 'cross';
+  document.body.classList.toggle('sym-cross', cross);
+  document.querySelectorAll('.sym-btn').forEach(b => {
+    const on = b.dataset.sym === (cross ? 'cross' : 'dot');
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  if (save) {
+    try { localStorage.setItem(SYMBOL_KEY, cross ? 'cross' : 'dot'); } catch (e) {}
+  }
+}
+
+function initSymbolToggle() {
+  document.querySelectorAll('.sym-toggle').forEach(box => {
+    box.innerHTML =
+      '<span>Show electrons as:</span>' +
+      '<button type="button" class="sym-btn" data-sym="dot">• Dots</button>' +
+      '<button type="button" class="sym-btn" data-sym="cross">× Crosses</button>';
+    box.querySelectorAll('.sym-btn').forEach(b =>
+      b.addEventListener('click', () => setSymbol(b.dataset.sym)));
+  });
+  let saved = 'dot';
+  try { saved = localStorage.getItem(SYMBOL_KEY) || 'dot'; } catch (e) {}
+  setSymbol(saved, false);
+}
+
+function initApp() {
+  initSymbolToggle();
+  loadProgress();
+  renderPeriodicTable();
+  showPage('table');
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
+
+
+/* ============================================================
+   SECTION 6a — initDnD(el)
+   Builds the drag-and-drop interface for elements 12–20.
+   - Populates the electron bank with draggable electron tokens
+   - Creates one drop zone per electron shell
+   - Resets any previous DnD state
+   el: element object from ELEMENTS array
+   ============================================================ */
+
+/* ============================================================
+   Shell diagram used as the drag-and-drop target.
+   Builds one circle per electron shell (same sizes and colours as the
+   static dot-and-cross diagram) plus the nucleus. Circles are stacked
+   inner-on-top so the topmost circle under a pointer is the shell band
+   being pointed at.
+   cfg = { zoneClass, zoneId, droppedId, labelId, setup(zone, i) }
+   ============================================================ */
+/* ============================================================
+   Where each electron in a shell is drawn.
+   - Shell 1: spread evenly around the ring.
+   - Shells 2+: four positions (top, right, bottom, left). Electrons go
+     one per position first; once all four are used, further electrons
+     pair up beside the first ones. A pair is drawn side by side.
+   Returns [{ angle (deg, 0 = right, -90 = top), side (-1 | 0 | 1) }]
+   ============================================================ */
+function electronSlots(count, shellIndex) {
+  const slots = [];
+  for (let k = 0; k < count; k++) {
+    if (shellIndex === 0 || count > 8) {
+      slots.push({ angle: (360 / count) * k - 90, side: 0 });
+      continue;
+    }
+    const pos    = k % 4;
+    const paired = k < 4 ? (k + 4 < count) : true;
+    slots.push({
+      angle: pos * 90 - 90,
+      side:  paired ? (k < 4 ? -1 : 1) : 0
+    });
+  }
+  return slots;
+}
+
+const DND_SIZE = 300;   // logical coordinate space (same as the static diagram)
+
+function buildShellDiagram(container, el, cfg) {
+  container.innerHTML = '';
+  const pct = v => `${(v / DND_SIZE) * 100}%`;
+
+  el.shells.forEach((_, i) => {
+    const D    = SHELL_DIAMETERS[i];
+    const prev = i > 0 ? SHELL_DIAMETERS[i - 1] : 0;
+
+    const zone = document.createElement('div');
+    zone.className = cfg.zoneClass;
+    zone.id        = `${cfg.zoneId}${i}`;
+    zone.dataset.shellIndex = i;
+    zone.style.width  = pct(D);
+    zone.style.zIndex = 10 - i;                         // inner circles on top
+    zone.style.setProperty('--ring',  SHELL_COLOURS[i]);
+    zone.style.setProperty('--inner', `${(prev / D) * 100}%`);
+    zone.setAttribute('aria-label',
+      `Shell ${i + 1}, holds up to ${SHELL_MAX[i]} electrons`);
+
+    const dropped = document.createElement('div');
+    dropped.className = 'ring-electrons';
+    dropped.id        = `${cfg.droppedId}${i}`;
+    dropped.dataset.shellIndex = i;
+    zone.appendChild(dropped);
+
+    const label = document.createElement('div');
+    label.className   = 'ring-label';
+    label.id          = `${cfg.labelId}${i}`;
+    label.style.color = SHELL_COLOURS[i];
+    label.textContent = `max ${SHELL_MAX[i]}`;
+    zone.appendChild(label);
+
+    if (cfg.setup) cfg.setup(zone, i);
+    container.appendChild(zone);
+  });
+
+  const nucleus = document.createElement('div');
+  nucleus.className = 'nucleus';
+  nucleus.innerHTML = `
+    <div style="text-align:center; line-height:1.3;">
+      <div style="font-size:0.65rem; color:#faa;">${el.z}p</div>
+      <div style="font-size:0.55rem; color:#adf;">${el.mass - el.z}n</div>
+    </div>`;
+  container.appendChild(nucleus);
+}
+
+/* Spread the electrons currently in a ring evenly around it,
+   starting from the top — exactly like the static dot-and-cross diagram. */
+function layoutRing(dropped) {
+  if (!dropped) return;
+  const els   = [...dropped.children];
+  const slots = electronSlots(els.length, parseInt(dropped.dataset.shellIndex || '0'));
+  els.forEach((e, k) => {
+    const a  = (slots[k].angle * Math.PI) / 180;
+    // a pair is two marks side by side: shift each along the ring
+    const tx = (-Math.sin(a) * slots[k].side * 0.31).toFixed(3);
+    const ty = ( Math.cos(a) * slots[k].side * 0.31).toFixed(3);
+    // +2px compensates for the 2px ring border (children are positioned in the padding box)
+    e.style.left = `calc(50% + (50% + 2px) * ${Math.cos(a).toFixed(4)} + var(--e) * ${tx})`;
+    e.style.top  = `calc(50% + (50% + 2px) * ${Math.sin(a).toFixed(4)} + var(--e) * ${ty})`;
+  });
+}
+
+// Module-level DnD state — tracks what is in each shell zone
+const DND_STATE = {
+  bank:   [],      // electron IDs currently in the bank
+  shells: {},      // shellIndex → array of electron IDs placed there
+  total:  0,       // total electrons for this element
+  el:     null     // current element object
+};
+
+function initDnD(el) {
+  DND_STATE.el     = el;
+  tapSelected      = null;
+  DND_STATE.total  = el.z;
+  DND_STATE.bank   = [];
+  DND_STATE.shells = {};
+
+  el.shells.forEach((_, i) => { DND_STATE.shells[i] = []; });
+  setMaxHint(false);                       // hint labels start hidden
+
+  /* ── Clear previous feedback ─────────────────────────────── */
+  const feedback = document.getElementById('dnd-feedback');
+  feedback.className = 'dnd-feedback';
+  feedback.textContent = '';
+
+  /* ── Build electron bank ─────────────────────────────────── */
+  const bank = document.getElementById('electron-bank');
+  bank.innerHTML = '';
+
+  for (let i = 0; i < el.z; i++) {
+    const eId  = `bank-e-${i}`;
+    DND_STATE.bank.push(eId);
+
+    const dot  = document.createElement('div');
+    dot.className     = 'bank-electron';
+    dot.id            = eId;
+    dot.dataset.eid   = eId;
+
+    // Drag events
+    attachBankHandlers(dot);
+
+    bank.appendChild(dot);
+  }
+
+  /* ── Build the shell diagram (the rings are the drop targets) ── */
+  buildShellDiagram(document.getElementById('shell-drop-zones'), el, {
+    zoneClass: 'shell-drop-zone',
+    zoneId:    'drop-zone-',
+    droppedId: 'dropped-',
+    labelId:   'ring-label-',
+    setup:     zone => makeActivatable(zone, onZoneClick)
+  });
+}
+
+/* ============================================================
+   SECTION 6b — Drag Event Handlers
+   ============================================================ */
+
+// Tracks the electron currently being dragged
+let draggedEId     = null;
+let draggedFromBank = true;  // true = came from bank, false = came from a shell
+let draggedFromShell = null; // shellIndex if dragged from a shell zone
+
+/* ============================================================
+   Pointer-based drag-and-drop (mouse, touch and pen)
+   HTML5 drag-and-drop does not fire on touch screens, so electrons
+   are dragged with Pointer Events instead. A press that moves less
+   than DRAG_THRESHOLD px is left alone, so taps and clicks still work.
+   ctx = {
+     zoneSelector: CSS selector for the shell drop zones,
+     hasRoom(zone): true if the shell can accept another electron,
+     begin(el):     record where the electron came from,
+     drop(zone,el): place the electron in the zone
+   }
+   ============================================================ */
+const DRAG_THRESHOLD = 8;
+
+function enablePointerDrag(el, ctx) {
+  el.addEventListener('dragstart',  ev => ev.preventDefault());
+  el.addEventListener('contextmenu', ev => ev.preventDefault());  // long-press menu on touch
+
+  el.addEventListener('pointerdown', ev => {
+    if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+
+    const pointerId = ev.pointerId;
+    const startX = ev.clientX, startY = ev.clientY;
+    let lastX = startX, lastY = startY;
+    let ghost = null, hoverZone = null, raf = null;
+
+    // A circle only "catches" the electron when the pointer is close to its line.
+    // Tolerance is in diagram units (rings are 35 units apart): tight for a mouse,
+    // a little more forgiving for a finger.
+    const tolUnits = ev.pointerType === 'touch' ? 12.6 : 9.9;   // 10% tighter than before
+    const zoneAt = (x, y) => {
+      let best = null, bestErr = Infinity;
+      document.querySelectorAll(ctx.zoneSelector).forEach(z => {
+        const r    = z.getBoundingClientRect();
+        const rad  = r.width / 2;
+        const unit = r.width / SHELL_DIAMETERS[+z.dataset.shellIndex];
+        const err  = Math.abs(Math.hypot(x - (r.left + rad), y - (r.top + r.height / 2)) - rad);
+        if (err <= tolUnits * unit && err < bestErr) { best = z; bestErr = err; }
+      });
+      return best;
+    };
+
+    const setHover = zone => {
+      if (zone === hoverZone) return;
+      if (hoverZone) hoverZone.classList.remove('drag-over');
+      hoverZone = zone;
+      if (zone && ctx.hasRoom(zone)) zone.classList.add('drag-over');
+    };
+
+    const moveGhost = () => {
+      ghost.style.left = `${lastX}px`;
+      ghost.style.top  = `${lastY}px`;
+      setHover(zoneAt(lastX, lastY));
+    };
+
+    // Scroll the page when the electron is held near the top/bottom edge
+    const edgeScroll = () => {
+      if (!ghost) return;
+      const edge = 70, step = 14;
+      if (lastY < edge)                         { window.scrollBy(0, -step); moveGhost(); }
+      else if (lastY > window.innerHeight - edge) { window.scrollBy(0,  step); moveGhost(); }
+      raf = requestAnimationFrame(edgeScroll);
+    };
+
+    const beginDrag = () => {
+      ctx.begin(el);
+      ghost = el.cloneNode(true);
+      ghost.removeAttribute('id');
+      ghost.removeAttribute('tabindex');
+      ghost.removeAttribute('role');
+      const box = el.getBoundingClientRect();
+      ghost.className = 'bank-electron drag-ghost';
+      ghost.style.width    = `${box.width}px`;
+      ghost.style.height   = `${box.height}px`;
+      ghost.style.fontSize = getComputedStyle(el).fontSize;
+      document.body.appendChild(ghost);
+      el.classList.add('is-dragging');
+      document.body.classList.add('is-dragging-electron');
+      raf = requestAnimationFrame(edgeScroll);
+    };
+
+    const onMove = e => {
+      if (e.pointerId !== pointerId) return;
+      lastX = e.clientX; lastY = e.clientY;
+      if (!ghost) {
+        if (Math.hypot(lastX - startX, lastY - startY) < DRAG_THRESHOLD) return;
+        beginDrag();
+      }
+      e.preventDefault();
+      moveGhost();
+    };
+
+    const finish = (e, cancelled) => {
+      if (e.pointerId !== pointerId) return;
+      window.removeEventListener('pointermove',   onMove);
+      window.removeEventListener('pointerup',     onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      try { el.releasePointerCapture(pointerId); } catch (_) {}
+      if (!ghost) return;                       // it was a tap — the click handler deals with it
+
+      cancelAnimationFrame(raf);
+      // A drop only counts when a circle is glowing under the pointer: no snapping.
+      const zone = cancelled ? null : zoneAt(e.clientX, e.clientY);
+      if (!zone && !cancelled) showToast('Missed! Drop the electron right on a circle (it glows when you are close).');
+      ghost.remove(); ghost = null;
+      el.classList.remove('is-dragging');
+      document.body.classList.remove('is-dragging-electron');
+      if (hoverZone) { hoverZone.classList.remove('drag-over'); hoverZone = null; }
+
+      // A drag can be followed by a stray click on the same electron — swallow it
+      const swallow = ev => {
+        if (el.contains(ev.target)) { ev.stopImmediatePropagation(); ev.preventDefault(); }
+      };
+      window.addEventListener('click', swallow, true);
+      setTimeout(() => window.removeEventListener('click', swallow, true), 400);
+
+      if (zone) ctx.drop(zone, el);
+    };
+    const onUp     = e => finish(e, false);
+    const onCancel = e => finish(e, true);
+
+    window.addEventListener('pointermove',   onMove, { passive: false });
+    window.addEventListener('pointerup',     onUp);
+    window.addEventListener('pointercancel', onCancel);
+    try { el.setPointerCapture(pointerId); } catch (_) {}
+  });
+}
+
+function clearSelected(containerSel) {
+  document.querySelectorAll(`${containerSel} .bank-electron.selected`)
+    .forEach(b => b.classList.remove('selected'));
+}
+
+/* Learn-page context */
+const learnDrag = {
+  zoneSelector: '.shell-drop-zone',
+  hasRoom() { return true; },          // no cap while building: students can make mistakes, then fix them
+  begin(el) {
+    const zone = el.closest('.shell-drop-zone');
+    draggedEId       = el.dataset.eid;
+    draggedFromBank  = !zone;
+    draggedFromShell = zone ? parseInt(zone.dataset.shellIndex) : null;
+    tapSelected = null;
+    clearSelected('#electron-bank');
+  },
+  drop(zone) {
+    // Dropped back into the shell it came from — nothing to do
+    if (!draggedFromBank && draggedFromShell === parseInt(zone.dataset.shellIndex)) return;
+    placeElectronInZone(zone, draggedEId);
+  }
+};
+
+/* Tap / keyboard alternative to dragging:
+   select an electron in the bank, then activate a shell to place it. */
+let tapSelected = null;
+
+function attachBankHandlers(dot) {
+  enablePointerDrag(dot, learnDrag);
+  makeActivatable(dot, () => {
+    const eid = dot.dataset.eid;
+    tapSelected = (tapSelected === eid) ? null : eid;
+    document.querySelectorAll('#electron-bank .bank-electron').forEach(b =>
+      b.classList.toggle('selected', b.dataset.eid === tapSelected));
+    if (tapSelected) {
+      draggedEId = eid; draggedFromBank = true; draggedFromShell = null;
+    }
+  });
+}
+
+function onZoneClick(e) {
+  if (tapSelected) placeElectronInZone(e.currentTarget, tapSelected);
+}
+
+function placeElectronInZone(zone, eid) {
+  zone.classList.remove('drag-over');
+
+  const shellIndex = parseInt(zone.dataset.shellIndex);
+  if (!eid) return;
+  tapSelected = null;
+  document.querySelectorAll('#electron-bank .bank-electron.selected')
+    .forEach(b => b.classList.remove('selected'));
+
+  // Remove from source
+  if (draggedFromBank) {
+    DND_STATE.bank = DND_STATE.bank.filter(id => id !== eid);
+    const bankEl   = document.getElementById(eid);
+    if (bankEl) bankEl.remove();
+  } else if (draggedFromShell !== null && draggedFromShell !== shellIndex) {
+    // Moving between shells — remove from old shell
+    DND_STATE.shells[draggedFromShell] =
+      DND_STATE.shells[draggedFromShell].filter(id => id !== eid);
+    const oldDot = document.getElementById(`placed-${eid}`);
+    if (oldDot) oldDot.remove();
+    layoutRing(document.getElementById(`dropped-${draggedFromShell}`));
+
+    // Remove result styling from old zone
+    const oldZone = document.getElementById(`drop-zone-${draggedFromShell}`);
+    if (oldZone) {
+      oldZone.classList.remove('dnd-correct', 'dnd-wrong');
+    }
+  } else if (draggedFromShell === shellIndex) {
+    // Dropped back into same shell — do nothing
+    return;
+  }
+
+  // Add to new shell in state
+  DND_STATE.shells[shellIndex].push(eid);
+
+  // Render placed electron in the drop zone
+  const container = document.getElementById(`dropped-${shellIndex}`);
+  const placed    = document.createElement('div');
+  placed.className      = 'dropped-electron';
+  placed.id             = `placed-${eid}`;
+  placed.dataset.eid    = eid;
+  placed.dataset.shell  = shellIndex;
+
+  // Click to return to bank
+  makeActivatable(placed, (ev) => { ev.stopPropagation(); returnElectron(eid, shellIndex); });
+  enablePointerDrag(placed, learnDrag);
+
+  container.appendChild(placed);
+  layoutRing(container);
+
+  // Clear any previous check styling on this zone
+  zone.classList.remove('dnd-correct', 'dnd-wrong');
+
+  // Reset feedback message when student makes a change
+  const feedback = document.getElementById('dnd-feedback');
+  feedback.className   = 'dnd-feedback';
+  feedback.textContent = '';
+}
+
+
+/* ============================================================
+   SECTION 6c — returnElectron(eid, shellIndex)
+   Called when a student clicks a placed electron to return
+   it to the bank.
+   eid:        electron ID string
+   shellIndex: which shell it is being returned from
+   ============================================================ */
+function returnElectron(eid, shellIndex) {
+  // Remove from shell state
+  DND_STATE.shells[shellIndex] =
+    DND_STATE.shells[shellIndex].filter(id => id !== eid);
+
+  // Remove placed dot from drop zone
+  const placed = document.getElementById(`placed-${eid}`);
+  if (placed) placed.remove();
+  layoutRing(document.getElementById(`dropped-${shellIndex}`));
+
+  // Remove result styling from zone
+  const zone = document.getElementById(`drop-zone-${shellIndex}`);
+  if (zone) zone.classList.remove('dnd-correct', 'dnd-wrong');
+
+  // Add electron back to bank
+  DND_STATE.bank.push(eid);
+
+  const bank = document.getElementById('electron-bank');
+  const dot  = document.createElement('div');
+  dot.className   = 'bank-electron';
+  dot.id          = eid;
+  dot.dataset.eid = eid;
+
+  attachBankHandlers(dot);
+
+  bank.appendChild(dot);
+
+  // Reset feedback message when student makes a change
+  const feedback = document.getElementById('dnd-feedback');
+  feedback.className   = 'dnd-feedback';
+  feedback.textContent = '';
+}
+
+/* ============================================================
+   SECTION 6d — checkDnD()
+   Validates the student's electron arrangement against the
+   correct answer for the current element.
+   - Colours each shell zone green (correct) or red (wrong)
+   - Shows an overall feedback message
+   - If fully correct, calls unlockNext() to progress
+   ============================================================ */
+function checkDnD() {
+  const el = DND_STATE.el;
+  if (!el) return;
+
+  // Check that all electrons have been placed
+  if (DND_STATE.bank.length > 0) {
+    showToast(
+      `⚠️ You still have ${DND_STATE.bank.length} electron` +
+      `${DND_STATE.bank.length > 1 ? 's' : ''} left to place!`
+    );
+    return;
+  }
+
+  let allCorrect = true;
+  let feedback   = '';
+
+  el.shells.forEach((correctCount, shellIndex) => {
+    const placed    = DND_STATE.shells[shellIndex].length;
+    const zone      = document.getElementById(`drop-zone-${shellIndex}`);
+    const ordinals  = ['1st', '2nd', '3rd', '4th'];
+    const ordinal   = ordinals[shellIndex];
+
+    if (placed === correctCount) {
+      // Correct
+      zone.classList.remove('dnd-wrong');
+      zone.classList.add('dnd-correct');
+    } else {
+      // Wrong
+      zone.classList.remove('dnd-correct');
+      zone.classList.add('dnd-wrong');
+      allCorrect = false;
+      feedback  += `${ordinal} shell: you placed ${placed} (${placed > correctCount ? 'too many' : 'too few'}), ` +
+                   `expected ${correctCount}. `;
+    }
+  });
+
+  const feedbackEl = document.getElementById('dnd-feedback');
+
+  if (allCorrect) {
+    feedbackEl.className   = 'dnd-feedback show fb-ok';
+    feedbackEl.textContent =
+      `✅ Correct! The electron arrangement for ${el.name} is ` +
+      `${el.shells.join(', ')}. Well done!`;
+
+    // Mark element as completed and unlock next
+    unlockNext(STATE.currentIndex);
+    setEaCard(el, false);
+
+    // After a short delay, show the completed static diagram
+    const doneIndex = STATE.currentIndex;
+    setTimeout(() => {
+      if (STATE.currentIndex !== doneIndex) return;   // student navigated away
+      document.getElementById('dnd-area').style.display    = 'none';
+      document.getElementById('static-diagram').style.display = 'block';
+      drawDotAndCross(el);
+    }, 1800);
+
+  } else {
+    feedbackEl.className   = 'dnd-feedback show fb-error';
+    feedbackEl.textContent =
+      `❌ Not quite. ${feedback.trim()} Try again or use the Hint button!`;
+  }
+}
+
+
+/* ============================================================
+   SECTION 6e — resetDnD()
+   Clears all shell drop zones and returns every electron
+   back to the bank. Resets all visual feedback states.
+   ============================================================ */
+function resetDnD() {
+  const el = DND_STATE.el;
+  if (!el) return;
+
+  // Clear all shell states
+  el.shells.forEach((_, shellIndex) => {
+    DND_STATE.shells[shellIndex] = [];
+
+    // Clear dropped electrons from zone
+    const container = document.getElementById(`dropped-${shellIndex}`);
+    if (container) container.innerHTML = '';
+
+    // Remove result styling from zone
+    const zone = document.getElementById(`drop-zone-${shellIndex}`);
+    if (zone) zone.classList.remove('dnd-correct', 'dnd-wrong');
+  });
+
+  // Clear bank state
+  DND_STATE.bank = [];
+
+  // Rebuild bank with all electrons
+  const bank = document.getElementById('electron-bank');
+  bank.innerHTML = '';
+
+  for (let i = 0; i < el.z; i++) {
+    const eId = `bank-e-${i}`;
+    DND_STATE.bank.push(eId);
+
+    const dot       = document.createElement('div');
+    dot.className   = 'bank-electron';
+    dot.id          = eId;
+    dot.dataset.eid = eId;
+
+    attachBankHandlers(dot);
+
+    bank.appendChild(dot);
+  }
+
+  // Clear feedback message
+  const feedback       = document.getElementById('dnd-feedback');
+  feedback.className   = 'dnd-feedback';
+  feedback.textContent = '';
+
+  showToast('↺ Reset! Try building the electron arrangement again.');
+}
+
+/* ============================================================
+   SECTION 6f — showHint()
+   Animates sparkle twinkles over each shell drop zone
+   and briefly shows the correct number of electrons
+   needed for each shell without giving away the full answer.
+   ============================================================ */
+/* The "max N" shell labels are hidden while building; the Hint button toggles them. */
+function setMaxHint(on) {
+  const zones = document.getElementById('shell-drop-zones');
+  const btn   = document.getElementById('hint-btn');
+  if (zones) zones.classList.toggle('show-max', on);
+  if (btn) {
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.textContent = on ? '✨ Hide hint' : '✨ Hint';
+  }
+}
+
+function showHint() {
+  const el = DND_STATE.el;
+  if (!el) return;
+  const zones = document.getElementById('shell-drop-zones');
+  const on = !zones.classList.contains('show-max');
+  setMaxHint(on);
+  if (!on) return;
+
+  const chars = ['✨', '⭐', '💫', '✦', '★', '✧'];
+  el.shells.forEach((_, shellIndex) => {
+    if (!document.getElementById(`drop-zone-${shellIndex}`)) return;
+    const r = (SHELL_DIAMETERS[shellIndex] / 2 / DND_SIZE) * 100;   // ring radius, % of canvas
+    for (let k = 0; k < 6; k++) {                                   // sparkles around the ring
+      const a  = Math.random() * Math.PI * 2;
+      const sp = document.createElement('div');
+      sp.className = 'hint-sparkle';
+      sp.style.left = `${50 + r * Math.cos(a)}%`;
+      sp.style.top  = `${50 + r * Math.sin(a)}%`;
+      sp.style.animationDelay = `${k * 0.12}s`;
+      sp.textContent = chars[k % chars.length];
+      zones.appendChild(sp);
+      setTimeout(() => sp.remove(), 1200 + k * 120);
+    }
+  });
+  showToast('✨ Hint: each shell shows the most electrons it can hold');
+}
+
+
+/* ============================================================
+   SECTION 7a — buildQuiz()
+   Generates a 10-question quiz from the pool of completed
+   elements. Mixes three question types:
+   - MCQ:  multiple choice questions on atomic structure
+   - FILL: fill-in-the-blank nuclide notation questions
+   - DND:  drag-and-drop electron arrangement questions
+   Questions are shuffled so each attempt feels different.
+   ============================================================ */
+function buildQuiz() {
+  const { quiz } = STATE;
+  quiz.questions = [];
+  quiz.answers   = [];
+  quiz.currentQ  = 0;
+  quiz.score     = 0;
+
+  // Pool of available elements — all unlocked elements
+  const pool = ELEMENTS.filter((_, i) => STATE.completed.has(i));
+
+  // Helper: pick a random element from pool
+  function randEl() {
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Helper: pick N unique elements from pool
+  function pickUnique(n) {
+    const shuffled = [...pool].shuffled();
+    return shuffled.slice(0, Math.min(n, shuffled.length));
+  }
+
+  // Helper: generate wrong MCQ options that are plausible
+  function wrongOptions(correct, key, count = 3) {
+    const wrongs = new Set();
+    const allVals = ELEMENTS.map(e => e[key]).filter(v => v !== correct);
+    const shuffled = allVals.shuffled();
+    shuffled.forEach(v => { if (wrongs.size < count) wrongs.add(v); });
+    return [...wrongs];
+  }
+
+  /* ── Question templates ──────────────────────────────────── */
+
+  // Q-TYPE 1: MCQ — How many protons does [element] have?
+  function makeProtonMCQ(el) {
+    const correct = el.z;
+    const wrongs  = wrongOptions(correct, 'z');
+    const options = [correct, ...wrongs]
+      .shuffled()
+      .map(String);
+    return {
+      type:    'mcq',
+      text:    `How many protons does a ${el.name} (${el.sym}) atom have?`,
+      options,
+      correct: String(correct),
+      el
+    };
+  }
+
+  // Q-TYPE 2: MCQ — What is the mass number of [element]?
+  function makeMassMCQ(el) {
+    const correct = el.mass;
+    const wrongs  = wrongOptions(correct, 'mass');
+    const options = [correct, ...wrongs]
+      .shuffled()
+      .map(String);
+    return {
+      type:    'mcq',
+      text:    `What is the mass number of ${el.name} (${el.sym})?`,
+      options,
+      correct: String(correct),
+      el
+    };
+  }
+
+  // Q-TYPE 3: MCQ — Which element has atomic number [z]?
+  function makeIdentifyMCQ(el) {
+    const correct = el.name;
+    const wrongs  = ELEMENTS
+      .filter(e => e.z !== el.z)
+      .shuffled()
+      .slice(0, 3)
+      .map(e => e.name);
+    const options = [correct, ...wrongs].shuffled();
+    return {
+      type:    'mcq',
+      text:    `Which element has an atomic number of ${el.z}?`,
+      options,
+      correct,
+      el
+    };
+  }
+
+  // Q-TYPE 4: MCQ — How many electron shells does [element] have?
+  function makeShellMCQ(el) {
+    const correct = el.shells.length;
+    const wrongs  = [1, 2, 3, 4]
+      .filter(n => n !== correct)
+      .shuffled()
+      .slice(0, 3);
+    const options = [correct, ...wrongs]
+      .shuffled()
+      .map(String);
+    return {
+      type:    'mcq',
+      text:    `How many electron shells does a ${el.name} (${el.sym}) atom have?`,
+      options,
+      correct: String(correct),
+      el
+    };
+  }
+
+  // Q-TYPE 5: MCQ — What is the electron arrangement of [element]?
+  function makeArrangementMCQ(el) {
+    const correct = el.shells.join(', ');
+    const wrongs  = ELEMENTS
+      .filter(e => e.z !== el.z)
+      .shuffled()
+      .slice(0, 3)
+      .map(e => e.shells.join(', '));
+    const options = [correct, ...wrongs].shuffled();
+    return {
+      type:    'mcq',
+      text:    `What is the electron arrangement of ${el.name} (${el.sym})?`,
+      options,
+      correct,
+      el
+    };
+  }
+
+  // Q-TYPE 6: FILL — Fill in the nuclide notation for [element]
+  function makeFill(el) {
+    return {
+      type:    'fill',
+      text:    `Complete the nuclide notation for ${el.name} (${el.sym}).
+                Fill in the mass number, atomic number, and number of electrons.`,
+      correct: {
+        mass:      String(el.mass),
+        atomic:    String(el.z),
+        electrons: String(el.z)
+      },
+      el
+    };
+  }
+
+  // Q-TYPE 7: DND — Drag and drop electron arrangement for [element]
+  function makeDND(el) {
+    return {
+      type: 'dnd',
+      text: `Drag the electrons into the correct shells to show the
+             electron arrangement of ${el.name} (${el.sym}).
+             It has ${el.z} electrons in total.`,
+      correct: el.shells,
+      el
+    };
+  }
+
+  /* ── Assemble 10 questions ───────────────────────────────── */
+  // Always 10 questions: cycle through a shuffled pool so a small pool
+  // still yields a full quiz (elements repeat with different question types).
+  const QUIZ_LENGTH = 10;
+  const order    = pool.shuffled();
+  const selected = Array.from({ length: QUIZ_LENGTH }, (_, i) => order[i % order.length]);
+  const qMakers  = [
+    makeProtonMCQ,
+    makeMassMCQ,
+    makeIdentifyMCQ,
+    makeShellMCQ,
+    makeArrangementMCQ
+  ];
+
+  selected.forEach((el, i) => {
+    // Distribute question types:
+    // Q1–Q4:  MCQ (rotating through types)
+    // Q5–Q6:  Fill-in nuclide notation
+    // Q7–Q10: DnD electron arrangement
+    let q;
+    if (i < 4) {
+      q = qMakers[i % qMakers.length](el);
+    } else if (i < 6) {
+      q = makeFill(el);
+    } else {
+      q = makeDND(el);
+    }
+    quiz.questions.push(q);
+    quiz.answers.push(null); // placeholder for student answer
+  });
+
+  // Collapse template-literal whitespace so text reads cleanly everywhere
+  quiz.questions.forEach(q => { q.text = q.text.replace(/\s+/g, ' ').trim(); });
+
+  // Shuffle the final question order
+  quiz.questions = quiz.questions.shuffled();
+}
+
+/* ============================================================
+   SECTION 7b — renderQuestion(index)
+   Renders the question at the given index into the quiz card.
+   Clears previous question content, then delegates to the
+   appropriate renderer based on question type.
+   ============================================================ */
+function renderQuestion(index) {
+  const { quiz } = STATE;
+  const q        = quiz.questions[index];
+  if (!q) return;
+
+  /* ── Progress bar + label ────────────────────────────────── */
+  const total    = quiz.questions.length;
+  const pct      = Math.round((index / total) * 100);
+
+  document.getElementById('quiz-progress-label').textContent =
+    `Question ${index + 1} of ${total}`;
+  document.getElementById('progress-bar-fill').style.width =
+    `${pct}%`;
+
+  /* ── Question type badge ─────────────────────────────────── */
+  const badgeEl  = document.getElementById('q-type-badge');
+  const badgeMap = {
+    mcq:  { cls: 'badge-mcq',  label: 'Multiple Choice'    },
+    fill: { cls: 'badge-fill', label: 'Fill in the Blanks' },
+    dnd:  { cls: 'badge-dnd',  label: 'Drag and Drop'      }
+  };
+  const badge    = badgeMap[q.type];
+  badgeEl.className   = `q-type-badge ${badge.cls}`;
+  badgeEl.textContent = badge.label;
+
+  /* ── Question text ───────────────────────────────────────── */
+  document.getElementById('q-text').textContent = q.text;
+
+  /* ── Hide all input containers ───────────────────────────── */
+  document.getElementById('mcq-options').style.display       = 'none';
+  document.getElementById('fill-inputs').style.display       = 'none';
+  document.getElementById('quiz-dnd-container').style.display = 'none';
+
+  /* ── Delegate to type-specific renderer ──────────────────── */
+  if (q.type === 'mcq')  renderMCQ(q,  index);
+  if (q.type === 'fill') renderFill(q, index);
+  if (q.type === 'dnd')  renderQuizDnD(q, index);
+
+  /* ── Update Next button label ────────────────────────────── */
+  const btnNext = document.getElementById('btn-next-question');
+  btnNext.textContent = (index === total - 1) ? 'Submit Quiz ✔' : 'Next →';
+}
+
+
+/* ============================================================
+   SECTION 7c — renderMCQ(q, index)
+   Renders a multiple choice question.
+   Restores previously selected answer if student navigated back.
+   ============================================================ */
+function renderMCQ(q, index) {
+  const container = document.getElementById('mcq-options');
+  container.style.display = 'flex';
+  container.innerHTML     = '';
+
+  const savedAnswer = STATE.quiz.answers[index];
+
+  q.options.forEach(option => {
+    const btn       = document.createElement('button');
+    btn.type        = 'button';
+    btn.className   = 'mcq-option';
+    btn.textContent = option;
+
+    // Restore previously selected answer
+    if (savedAnswer === option) {
+      btn.classList.add('selected');
+    }
+
+    btn.addEventListener('click', () => {
+      // Deselect all options
+      container.querySelectorAll('.mcq-option')
+               .forEach(b => b.classList.remove('selected'));
+
+      // Select this option
+      btn.classList.add('selected');
+
+      // Save answer to state
+      STATE.quiz.answers[index] = option;
+    });
+
+    container.appendChild(btn);
+  });
+}
+
+/* ============================================================
+   SECTION 7d — renderFill(q, index)
+   Renders a fill-in-the-blank nuclide notation question.
+   Shows three labelled input fields:
+   - Mass number
+   - Atomic number
+   - Number of electrons
+   Restores previously entered values if student navigated back.
+   ============================================================ */
+function renderFill(q, index) {
+  const container = document.getElementById('fill-inputs');
+  container.style.display = 'flex';
+  container.innerHTML     = '';
+
+  const savedAnswer = STATE.quiz.answers[index] || {};
+
+  // Nuclide notation visual reference
+  const reference       = document.createElement('div');
+  reference.style.cssText = `
+    background: var(--bg-inset);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.8;
+  `;
+  reference.innerHTML = `
+    <strong style="color:var(--text-blue)">Nuclide Notation reminder:</strong><br>
+    <span style="color:var(--warning)">Mass number</span> (top left) =
+      number of protons + neutrons<br>
+    <span style="color:var(--accent)">Atomic number</span> (bottom left) =
+      number of protons<br>
+    <span style="color:var(--electron)">Electrons</span> =
+      same as number of protons (neutral atom)
+  `;
+  container.appendChild(reference);
+
+  // Input fields definition
+  const fields = [
+    {
+      key:         'mass',
+      label:       'Mass number (top left)',
+      placeholder: 'e.g. 23',
+      colour:      'var(--warning)'
+    },
+    {
+      key:         'atomic',
+      label:       'Atomic number (bottom left)',
+      placeholder: 'e.g. 11',
+      colour:      'var(--accent)'
+    },
+    {
+      key:         'electrons',
+      label:       'Number of electrons',
+      placeholder: 'e.g. 11',
+      colour:      'var(--electron)'
+    }
+  ];
+
+  fields.forEach(field => {
+    const row       = document.createElement('div');
+    row.className   = 'fill-row';
+
+    const label       = document.createElement('label');
+    label.textContent = field.label;
+    label.style.color = field.colour;
+
+    const input             = document.createElement('input');
+    input.type              = 'number';
+    input.min               = '1';
+    input.max               = '200';
+    input.placeholder       = field.placeholder;
+    input.value             = savedAnswer[field.key] || '';
+
+    // Save answer on every keystroke
+    input.addEventListener('input', () => {
+      const current = STATE.quiz.answers[index] || {};
+      current[field.key]          = input.value.trim();
+      STATE.quiz.answers[index]   = current;
+    });
+
+    row.appendChild(label);
+    row.appendChild(input);
+    container.appendChild(row);
+  });
+}
+
+/* ============================================================
+   SECTION 7e — renderQuizDnD(q, index)
+   Renders a drag-and-drop electron arrangement question
+   inside the quiz card. Uses the same drag logic as the
+   learn page DnD but scoped to the quiz context.
+   ============================================================ */
+
+// Quiz DnD state — separate from learn page DnD state
+const QUIZ_DND_STATE = {
+  bank:   [],
+  shells: {},
+  el:     null
+};
+
+function renderQuizDnD(q, index) {
+  const container = document.getElementById('quiz-dnd-container');
+  container.style.display = 'block';
+
+  QUIZ_DND_STATE.el     = q.el;
+  quizTap               = null;
+  QUIZ_DND_STATE.bank   = [];
+  QUIZ_DND_STATE.shells = {};
+  q.el.shells.forEach((_, i) => { QUIZ_DND_STATE.shells[i] = []; });
+
+  /* ── Restore previously placed electrons ─────────────────── */
+  const savedAnswer = STATE.quiz.answers[index];
+
+  /* ── Build electron bank ─────────────────────────────────── */
+  const bank = document.getElementById('quiz-dnd-bank');
+  bank.innerHTML = '';
+
+  for (let i = 0; i < q.el.z; i++) {
+    const eId = `quiz-e-${i}`;
+    QUIZ_DND_STATE.bank.push(eId);
+
+    const dot       = document.createElement('div');
+    dot.className   = 'bank-electron';
+    dot.id          = eId;
+    dot.dataset.eid = eId;
+
+    attachQuizBankHandlers(dot);
+
+    bank.appendChild(dot);
+  }
+
+  /* ── Build the shell diagram (the rings are the drop targets) ── */
+  buildShellDiagram(document.getElementById('quiz-shell-zones'), q.el, {
+    zoneClass: 'quiz-shell-zone',
+    zoneId:    'quiz-zone-',
+    droppedId: 'quiz-dropped-',
+    labelId:   'quiz-ring-label-',
+    setup:     zone => makeActivatable(zone, (e) => onQuizZoneClick(e, index))
+  });
+
+  // Restore saved answer if student navigated back
+  if (savedAnswer && typeof savedAnswer === 'object' &&
+      savedAnswer.shells) {
+    Object.entries(savedAnswer.shells).forEach(([k, eIds]) => {
+      const shellIndex = Number(k);
+      eIds.forEach(eid => {
+        restoreQuizElectron(eid, shellIndex, index);
+      });
+    });
+  }
+}
+
+/* ── Quiz DnD drag handlers ──────────────────────────────────
+   Mirrors the learn page handlers but operates on
+   QUIZ_DND_STATE and quiz-prefixed element IDs.
+   ──────────────────────────────────────────────────────────── */
+let quizDraggedEId    = null;
+let quizDraggedFromShell = null;
+
+/* Quiz context (same pointer-drag module, scoped to the quiz zones) */
+const quizDrag = {
+  zoneSelector: '.quiz-shell-zone',
+  hasRoom(zone) {
+    const i = parseInt(zone.dataset.shellIndex);
+    return (QUIZ_DND_STATE.shells[i]?.length || 0) < SHELL_MAX[i];
+  },
+  begin(el) {
+    const zone = el.closest('.quiz-shell-zone');
+    quizDraggedEId       = el.dataset.eid;
+    quizDraggedFromShell = zone ? parseInt(zone.dataset.shellIndex) : null;
+    quizTap = null;
+    clearSelected('#quiz-dnd-bank');
+  },
+  drop(zone) {
+    if (quizDraggedFromShell !== null &&
+        quizDraggedFromShell === parseInt(zone.dataset.shellIndex)) return;
+    placeQuizElectron(zone, quizDraggedEId, STATE.quiz.currentQ);
+  }
+};
+
+let quizTap = null;
+
+function attachQuizBankHandlers(dot) {
+  enablePointerDrag(dot, quizDrag);
+  makeActivatable(dot, () => {
+    const eid = dot.dataset.eid;
+    quizTap = (quizTap === eid) ? null : eid;
+    document.querySelectorAll('#quiz-dnd-bank .bank-electron').forEach(b =>
+      b.classList.toggle('selected', b.dataset.eid === quizTap));
+    if (quizTap) { quizDraggedEId = eid; quizDraggedFromShell = null; }
+  });
+}
+
+function onQuizZoneClick(e, qIndex) {
+  if (quizTap) placeQuizElectron(e.currentTarget, quizTap, qIndex);
+}
+
+function placeQuizElectron(zone, eid, qIndex) {
+  zone.classList.remove('drag-over');
+
+  const shellIndex = parseInt(zone.dataset.shellIndex);
+  const maxAllowed = SHELL_MAX[shellIndex];
+  const current    = QUIZ_DND_STATE.shells[shellIndex]?.length || 0;
+
+  if (current >= maxAllowed) {
+    showToast(`⚠️ Shell ${shellIndex + 1} can only hold ${maxAllowed} electrons!`);
+    return;
+  }
+
+  if (!eid) return;
+  quizTap = null;
+  document.querySelectorAll('#quiz-dnd-bank .bank-electron.selected')
+    .forEach(b => b.classList.remove('selected'));
+
+  // Remove from bank if it came from there
+  const bankEl = document.getElementById(eid);
+  if (bankEl && bankEl.closest('#quiz-dnd-bank')) {
+    QUIZ_DND_STATE.bank =
+      QUIZ_DND_STATE.bank.filter(id => id !== eid);
+    bankEl.remove();
+  }
+
+  // Remove from old shell if moving between shells
+  if (quizDraggedFromShell !== null &&
+      quizDraggedFromShell !== shellIndex) {
+    QUIZ_DND_STATE.shells[quizDraggedFromShell] =
+      QUIZ_DND_STATE.shells[quizDraggedFromShell]
+        .filter(id => id !== eid);
+    const oldDot = document.getElementById(`quiz-placed-${eid}`);
+    if (oldDot) oldDot.remove();
+    layoutRing(document.getElementById(`quiz-dropped-${quizDraggedFromShell}`));
+  }
+
+  // Add to new shell
+  if (!QUIZ_DND_STATE.shells[shellIndex]) {
+    QUIZ_DND_STATE.shells[shellIndex] = [];
+  }
+  QUIZ_DND_STATE.shells[shellIndex].push(eid);
+
+  // Render placed electron
+  const dropContainer = document.getElementById(`quiz-dropped-${shellIndex}`);
+  const placed        = document.createElement('div');
+  placed.className    = 'dropped-electron';
+  placed.id           = `quiz-placed-${eid}`;
+  placed.dataset.eid  = eid;
+
+  makeActivatable(placed, (ev) => { ev.stopPropagation(); returnQuizElectron(eid, shellIndex, qIndex); });
+  enablePointerDrag(placed, quizDrag);
+
+  dropContainer.appendChild(placed);
+  layoutRing(dropContainer);
+
+  // Save current DnD state as the answer
+  saveQuizDnDAnswer(qIndex);
+}
+
+function returnQuizElectron(eid, shellIndex, qIndex) {
+  QUIZ_DND_STATE.shells[shellIndex] =
+    QUIZ_DND_STATE.shells[shellIndex].filter(id => id !== eid);
+
+  const placed = document.getElementById(`quiz-placed-${eid}`);
+  if (placed) placed.remove();
+  layoutRing(document.getElementById(`quiz-dropped-${shellIndex}`));
+
+  QUIZ_DND_STATE.bank.push(eid);
+
+  const bank  = document.getElementById('quiz-dnd-bank');
+  const dot   = document.createElement('div');
+  dot.className   = 'bank-electron';
+  dot.id          = eid;
+  dot.dataset.eid = eid;
+
+  attachQuizBankHandlers(dot);
+
+  bank.appendChild(dot);
+  saveQuizDnDAnswer(qIndex);
+}
+
+function restoreQuizElectron(eid, shellIndex, qIndex) {
+  // Move from bank to shell visually
+  const bankEl = document.getElementById(eid);
+  if (bankEl) {
+    QUIZ_DND_STATE.bank =
+      QUIZ_DND_STATE.bank.filter(id => id !== eid);
+    bankEl.remove();
+  }
+
+  if (!QUIZ_DND_STATE.shells[shellIndex]) {
+    QUIZ_DND_STATE.shells[shellIndex] = [];
+  }
+  QUIZ_DND_STATE.shells[shellIndex].push(eid);
+
+  const dropContainer =
+    document.getElementById(`quiz-dropped-${shellIndex}`);
+  if (!dropContainer) return;
+
+  const placed        = document.createElement('div');
+  placed.className    = 'dropped-electron';
+  placed.id           = `quiz-placed-${eid}`;
+  placed.dataset.eid  = eid;
+
+  makeActivatable(placed, (ev) => { ev.stopPropagation(); returnQuizElectron(eid, shellIndex, qIndex); });
+  enablePointerDrag(placed, quizDrag);
+
+  dropContainer.appendChild(placed);
+  layoutRing(dropContainer);
+}
+
+function saveQuizDnDAnswer(qIndex) {
+  // Snapshot current shell state as the answer
+  const shellsCopy = {};
+  Object.keys(QUIZ_DND_STATE.shells).forEach(k => {
+    shellsCopy[k] = [...QUIZ_DND_STATE.shells[k]];
+  });
+  STATE.quiz.answers[qIndex] = { shells: shellsCopy };
+}
+
+/* ============================================================
+   SECTION 7f — nextQuestion()
+   Advances to the next question or submits the quiz if on
+   the last question. Validates that the student has provided
+   an answer before allowing progression.
+   ============================================================ */
+function nextQuestion() {
+  const { quiz } = STATE;
+  const index    = quiz.currentQ;
+  const q        = quiz.questions[index];
+
+  /* ── Validate answer is provided ────────────────────────── */
+  const answer = quiz.answers[index];
+
+  if (q.type === 'mcq' && !answer) {
+    showToast('⚠️ Please select an answer before continuing!');
+    return;
+  }
+
+  if (q.type === 'fill') {
+    if (!answer ||
+        !answer.mass || !answer.atomic || !answer.electrons) {
+      showToast('⚠️ Please fill in all three fields before continuing!');
+      return;
+    }
+  }
+
+  if (q.type === 'dnd') {
+    const totalPlaced = Object.values(QUIZ_DND_STATE.shells)
+      .reduce((sum, arr) => sum + arr.length, 0);
+    if (totalPlaced < q.el.z) {
+      showToast(
+        `⚠️ Please place all ${q.el.z} electrons before continuing!`
+      );
+      return;
+    }
+    // Save final DnD state
+    saveQuizDnDAnswer(index);
+  }
+
+  /* ── Advance or submit ───────────────────────────────────── */
+  if (index < quiz.questions.length - 1) {
+    quiz.currentQ++;
+    renderQuestion(quiz.currentQ);
+  } else {
+    // Last question — score and show results
+    scoreQuiz();
+  }
+}
+
+
+/* ============================================================
+   SECTION 7g — scoreQuiz()
+   Evaluates all answers against correct answers.
+   Computes total score out of 10.
+   Marks each question object with .studentAnswer and .correct
+   flag for use by renderResults().
+   ============================================================ */
+function scoreQuiz() {
+  const { quiz } = STATE;
+  let score = 0;
+
+  quiz.questions.forEach((q, i) => {
+    const answer = quiz.answers[i];
+    let isCorrect = false;
+
+    /* ── MCQ scoring ─────────────────────────────────────── */
+    if (q.type === 'mcq') {
+      isCorrect = answer === q.correct;
+      q.studentAnswer = answer || '(no answer)';
+    }
+
+    /* ── Fill-in scoring ─────────────────────────────────── */
+    if (q.type === 'fill') {
+      if (answer) {
+        const massOk      = String(answer.mass).trim()      ===
+                            String(q.correct.mass);
+        const atomicOk    = String(answer.atomic).trim()    ===
+                            String(q.correct.atomic);
+        const electronsOk = String(answer.electrons).trim() ===
+                            String(q.correct.electrons);
+        isCorrect = massOk && atomicOk && electronsOk;
+        q.studentAnswer = answer
+          ? `Mass: ${answer.mass}, Atomic: ${answer.atomic}, ` +
+            `Electrons: ${answer.electrons}`
+          : '(no answer)';
+      } else {
+        q.studentAnswer = '(no answer)';
+      }
+    }
+
+    /* ── DnD scoring ─────────────────────────────────────── */
+    if (q.type === 'dnd') {
+      if (answer && answer.shells) {
+        isCorrect = q.correct.every((correctCount, shellIndex) => {
+          const placed =
+            (answer.shells[shellIndex] || []).length;
+          return placed === correctCount;
+        });
+        // Build a readable summary of what was placed
+        const placedSummary = q.correct.map((_, shellIndex) => {
+          return (answer.shells[shellIndex] || []).length;
+        });
+        q.studentAnswer = placedSummary.join(', ');
+      } else {
+        q.studentAnswer = '(no answer)';
+      }
+    }
+
+    q.isCorrect = isCorrect;
+    if (isCorrect) score++;
+  });
+
+  quiz.score    = score;
+  quiz.active   = false;
+  quiz.finished = true;
+  quiz.attempts++;
+
+  renderResults();
+}
+
+/* ============================================================
+   SECTION 8a — renderResults()
+   Clones the results template and populates it with:
+   - Score circle
+   - Grade label with encouraging message
+   - Per-question breakdown (correct answer shown for wrong ones)
+   - Email form for sending results to teacher
+   Injects the populated template into #quiz-results-area.
+   ============================================================ */
+function renderResults() {
+  const { quiz } = STATE;
+
+  /* ── Switch visible panels ───────────────────────────────── */
+  document.getElementById('quiz-question-area').style.display = 'none';
+  document.getElementById('quiz-results-area').style.display  = 'block';
+
+  /* ── Clone results template ──────────────────────────────── */
+  const template = document.getElementById('results-template');
+  const clone    = template.content.cloneNode(true);
+
+  /* ── Score circle ────────────────────────────────────────── */
+  const scoreNum = clone.getElementById('res-score-num');
+  scoreNum.textContent = `${quiz.score}/10`;
+
+  // Colour the circle border based on score
+  const circle = clone.getElementById('res-score-circle');
+  if (quiz.score >= 8)      circle.style.borderColor = 'var(--success)';
+  else if (quiz.score >= 5) circle.style.borderColor = 'var(--warning)';
+  else                      circle.style.borderColor = 'var(--danger)';
+
+  /* ── Grade label ─────────────────────────────────────────── */
+  const gradeEl = clone.getElementById('res-grade');
+  let gradeText, gradeColour;
+
+  if (quiz.score === 10) {
+    gradeText   = '🏆 Perfect Score! Outstanding work!';
+    gradeColour = 'var(--success)';
+  } else if (quiz.score >= 8) {
+    gradeText   = '🌟 Excellent! You have a strong grasp of atomic structure.';
+    gradeColour = 'var(--success)';
+  } else if (quiz.score >= 6) {
+    gradeText   = '👍 Good effort! Review the questions you missed.';
+    gradeColour = 'var(--warning)';
+  } else if (quiz.score >= 4) {
+    gradeText   = '📖 Keep going! Revisit the elements and try again.';
+    gradeColour = 'var(--warning)';
+  } else {
+    gradeText   = '💪 Don\'t give up! Go back to the Periodic Table and ' +
+                  'review each element carefully.';
+    gradeColour = 'var(--danger)';
+  }
+
+  gradeEl.textContent = gradeText;
+  gradeEl.style.color = gradeColour;
+
+  /* ── Retry button ────────────────────────────────────────── */
+  const btnRetry  = clone.getElementById('btn-retry');
+  const retryNote = clone.getElementById('retry-note');
+
+  if (quiz.attempts >= 2) {
+    btnRetry.disabled       = true;
+    retryNote.textContent   =
+      'You have used your one retry. Well done for giving it another go!';
+    retryNote.style.color   = 'var(--danger)';
+  } else {
+    btnRetry.disabled       = false;
+    retryNote.textContent   =
+      `You have 1 retry remaining.`;
+    retryNote.style.color   = 'var(--text-muted)';
+  }
+
+  /* ── Question breakdown ──────────────────────────────────── */
+  const breakdownList = clone.getElementById('res-breakdown-list');
+
+  quiz.questions.forEach((q, i) => {
+    const item = document.createElement('div');
+    item.className = 'result-item';
+
+    // Correct answer text for display
+    let correctDisplay = '';
+    if (q.type === 'mcq') {
+      correctDisplay = q.correct;
+    } else if (q.type === 'fill') {
+      correctDisplay =
+        `Mass: ${q.correct.mass}, ` +
+        `Atomic: ${q.correct.atomic}, ` +
+        `Electrons: ${q.correct.electrons}`;
+    } else if (q.type === 'dnd') {
+      correctDisplay = q.correct.join(', ');
+    }
+
+    // Type badge colour for breakdown
+    const typeLabelMap = {
+      mcq:  'MCQ',
+      fill: 'Fill-in',
+      dnd:  'Drag & Drop'
+    };
+
+    item.innerHTML = `
+      <div class="result-icon">
+        ${q.isCorrect ? '✅' : '❌'}
+      </div>
+      <div style="flex:1">
+        <div class="result-q-text
+             ${q.isCorrect ? 'result-correct' : 'result-wrong'}">
+          Q${i + 1} [${typeLabelMap[q.type]}]: ${esc(q.text)}
+        </div>
+        <div class="result-detail">
+          Your answer: <strong>${esc(q.studentAnswer)}</strong>
+        </div>
+        ${!q.isCorrect ? `
+          <div class="result-detail" style="color:var(--success)">
+            Correct answer: <strong>${esc(correctDisplay)}</strong>
+          </div>` : ''}
+      </div>
+    `;
+
+    breakdownList.appendChild(item);
+  });
+
+  /* ── Inject into results area ────────────────────────────── */
+  const resultsArea = document.getElementById('quiz-results-area');
+  resultsArea.innerHTML = '';
+  resultsArea.appendChild(clone);
+}
+
+
+/* ============================================================
+   SECTION 8b — retryQuiz()
+   Resets the quiz state for a second attempt.
+   - Clears all answers and score
+   - Rebuilds a fresh set of questions
+   - Returns student to the question view
+   Only allowed once (max 2 attempts total).
+   ============================================================ */
+function retryQuiz() {
+  const { quiz } = STATE;
+
+  // Guard: no more than 2 attempts
+  if (quiz.attempts >= 2) {
+    showToast('⚠️ You have already used your one retry.');
+    return;
+  }
+
+  // Reset quiz state but keep attempt count
+  quiz.questions = [];
+  quiz.answers   = [];
+  quiz.currentQ  = 0;
+  quiz.score     = 0;
+  quiz.active    = true;
+  quiz.finished  = false;
+
+  // Rebuild with a fresh question set
+  buildQuiz();
+
+  // Reset QUIZ_DND_STATE
+  QUIZ_DND_STATE.bank   = [];
+  QUIZ_DND_STATE.shells = {};
+  QUIZ_DND_STATE.el     = null;
+
+  // Switch panels
+  document.getElementById('quiz-results-area').style.display   = 'none';
+  document.getElementById('quiz-question-area').style.display  = 'block';
+  document.getElementById('quiz-start').style.display          = 'none';
+
+  // Render first question
+  renderQuestion(0);
+
+  showToast('↺ Quiz restarted! Good luck!', 2000);
+}
+
+/* ============================================================
+   SECTION 8c — sendResults()
+   Composes a results summary and opens the device's default
+   email client via a mailto: link pre-filled with:
+   - Student name
+   - Score
+   - Per-question breakdown
+   This works entirely client-side with no backend required.
+   ============================================================ */
+function sendResults(mode) {
+  const { quiz } = STATE;
+
+  // Read student name and teacher email from the form
+  const studentName  =
+    document.getElementById('student-name')?.value.trim();
+  const teacherEmail =
+    document.getElementById('teacher-email')?.value.trim();
+
+  /* ── Validation ──────────────────────────────────────────── */
+  if (!studentName) {
+    showToast('⚠️ Please enter your name before sending.');
+    return;
+  }
+
+  if (mode !== 'copy' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(teacherEmail || '')) {
+    showToast('⚠️ Please enter a valid teacher email address.');
+    return;
+  }
+
+  /* ── Build email subject ─────────────────────────────────── */
+  const subject = encodeURIComponent(
+    `Atomic Structure Quiz Results — ${studentName}`
+  );
+
+  /* ── Build email body ────────────────────────────────────── */
+  const typeLabelMap = {
+    mcq:  'Multiple Choice',
+    fill: 'Fill-in-the-Blank',
+    dnd:  'Drag and Drop'
+  };
+
+  let breakdown = '';
+  quiz.questions.forEach((q, i) => {
+    let correctDisplay = '';
+    if (q.type === 'mcq') {
+      correctDisplay = q.correct;
+    } else if (q.type === 'fill') {
+      correctDisplay =
+        `Mass: ${q.correct.mass}, ` +
+        `Atomic: ${q.correct.atomic}, ` +
+        `Electrons: ${q.correct.electrons}`;
+    } else if (q.type === 'dnd') {
+      correctDisplay = q.correct.join(', ');
+    }
+
+    breakdown +=
+      `Q${i + 1} [${typeLabelMap[q.type]}]: ` +
+      `${q.isCorrect ? 'CORRECT' : 'WRONG'}\n` +
+      `Question:       ${q.text}\n` +
+      `Student answer: ${q.studentAnswer}\n` +
+      (q.isCorrect
+        ? ''
+        : `Correct answer: ${correctDisplay}\n`) +
+      `\n`;
+  });
+
+  // Grade summary
+  let gradeSummary = '';
+  if      (quiz.score === 10) gradeSummary = 'Perfect Score';
+  else if (quiz.score >= 8)   gradeSummary = 'Excellent';
+  else if (quiz.score >= 6)   gradeSummary = 'Good';
+  else if (quiz.score >= 4)   gradeSummary = 'Needs Improvement';
+  else                        gradeSummary = 'Requires Revision';
+
+  const body = encodeURIComponent(
+    `Atomic Structure Explorer — Quiz Results\n` +
+    `==========================================\n\n` +
+    `Student Name : ${studentName}\n` +
+    `Score        : ${quiz.score} / 10\n` +
+    `Grade        : ${gradeSummary}\n` +
+    `Attempt      : ${quiz.attempts} of 2\n` +
+    `Elements studied: ${STATE.completed.size} of 20\n\n` +
+    `------------------------------------------\n` +
+    `QUESTION BREAKDOWN\n` +
+    `------------------------------------------\n\n` +
+    `${breakdown}` +
+    `------------------------------------------\n` +
+    `Sent from Atomic Structure Explorer\n`
+  );
+
+  /* ── Open mailto link ────────────────────────────────────── */
+  const plainBody  = decodeURIComponent(body);
+  const resultsBox = document.getElementById('results-text');
+  if (resultsBox) {
+    resultsBox.value  = plainBody;
+    resultsBox.hidden = false;
+  }
+
+  if (mode === 'copy') {
+    if (resultsBox) { resultsBox.focus(); resultsBox.select(); }
+    const fallback = () => showToast('Text selected — press Ctrl/Cmd+C to copy it.', 3500);
+    try {
+      navigator.clipboard.writeText(plainBody)
+        .then(() => showToast('📋 Results copied!'), fallback);
+    } catch (err) { fallback(); }
+    return;
+  }
+
+  const mailtoLink =
+    `mailto:${encodeURIComponent(teacherEmail).replace('%40', '@')}` +
+    `?subject=${subject}&body=${body}`;
+
+  if (mailtoLink.length > 1800) {
+    showToast('⚠️ Results are long — if your email app does not open or cuts ' +
+              'the message, use Copy Results.', 5000);
+  } else {
+    showToast('📧 Trying to open your email app… if nothing happens, use Copy Results.', 4000);
+  }
+
+  try { window.location.href = mailtoLink; } catch (err) { /* blocked */ }
+}
+
+/* ============================================================
+   SECTION 8d — startQuiz()
+   Called when the student clicks Start Quiz on the
+   quiz start screen. Validates that at least one element
+   has been completed before allowing the quiz to begin.
+   ============================================================ */
+function startQuiz() {
+  const { quiz } = STATE;
+
+  // Need at least 4 elements unlocked for meaningful questions
+  if (STATE.completed.size < 4) {
+    showToast(
+      '⚠️ Please complete at least 4 elements on the ' +
+      'Periodic Table before taking the quiz!',
+      3500
+    );
+    return;
+  }
+
+  // Guard against starting if max attempts reached
+  if (quiz.attempts >= 2 && quiz.questions.length > 0) {
+    showToast(
+      '⚠️ You have used both attempts. ' +
+      'Review your results below.',
+      3000
+    );
+    document.getElementById('quiz-start').style.display          = 'none';
+    document.getElementById('quiz-results-area').style.display   = 'block';
+    return;
+  }
+
+  // Build question set
+  buildQuiz();
+
+  // Mark quiz as active
+  quiz.active = true;
+  quiz.finished = false;
+
+  // Switch panels
+  document.getElementById('quiz-start').style.display          = 'none';
+  document.getElementById('quiz-question-area').style.display  = 'block';
+  document.getElementById('quiz-results-area').style.display   = 'none';
+
+  // Render first question
+  renderQuestion(0);
+}
+
+
+/* Table size slider: scales the whole table (cells, numbers, symbols) and lets it scroll sideways */
+(function () {
+  const slider = document.getElementById('pt-zoom'), out = document.getElementById('pt-zoom-val'),
+        grid = document.getElementById('periodic-grid');
+  if (!slider || !grid) return;
+  let saved = null;
+  try { saved = localStorage.getItem('ptZoom3'); } catch (e) {}
+  const tall = document.documentElement.getAttribute('data-layout') === 'tall';
+  const apply = v => {
+    v = Math.max(30, Math.min(50, Math.round(+v) || 33));
+    slider.value = v; out.textContent = v + '%';
+    grid.style.width = (v * 3) + '%';      // 30% = 90% of the screen width, 50% = 150% (scrolls sideways); about 33% fits the screen
+  };
+  apply(saved !== null ? saved : (tall ? 40 : 33));
+  slider.addEventListener('input', () => {
+    apply(slider.value);
+    try { localStorage.setItem('ptZoom3', slider.value); } catch (e) {}
+  });
+})();
+
+/* Explorer text size slider (80–160%), remembered per student */
+(function () {
+  const slider = document.getElementById('learn-zoom'), out = document.getElementById('learn-zoom-val'),
+        page = document.getElementById('page-learn');
+  if (!slider || !page) return;
+  const apply = v => {
+    v = Math.max(80, Math.min(160, Math.round(+v) || 100));
+    slider.value = v; out.textContent = v + '%';
+    page.style.setProperty('--lt', v / 100);
+  };
+  let saved = null;
+  try { saved = localStorage.getItem('learnText'); } catch (e) {}
+  apply(saved !== null ? saved : 100);
+  slider.addEventListener('input', () => {
+    apply(slider.value);
+    try { localStorage.setItem('learnText', slider.value); } catch (e) {}
+  });
+})();
+</script>
+<script>
+/* ============================================================
+   ARCADE — Atom Doctor, Mystery Element, Blitz
+   Clue shown to students = periodic table notation only.
+   ============================================================ */
+const ARC_KEY = 'atomicStructureExplorer.arcade';
+const ARC = { best: { doctor: 0, mystery: 0, blitz: 0 }, badges: {}, g: null, timer: null, loaded: false };
+const ARC_BADGES = {
+  cure:    { icon: '🩺', name: 'First Cure',     desc: 'Fix an atom in Atom Doctor' },
+  perfect: { icon: '🏥', name: 'Perfect Doctor', desc: 'Three stars on all 5 patients' },
+  sharp:   { icon: '🧠', name: 'Sharp Mind',     desc: '8 out of 8 in Mystery Element' },
+  speed:   { icon: '⚡', name: 'Speed Demon',    desc: '6 or more atoms in one Blitz' },
+  streak:  { icon: '🔥', name: 'On Fire',        desc: '5 correct in a row' }
+};
+const $a = id => document.getElementById(id);
+const arcShuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const arcPick = a => a[Math.floor(Math.random() * a.length)];
+
+function arcLoad() {
+  if (ARC.loaded) return; ARC.loaded = true;
+  try {
+    const o = JSON.parse(localStorage.getItem(ARC_KEY) || 'null');
+    if (o) { Object.assign(ARC.best, o.best || {}); ARC.badges = o.badges || {}; }
+  } catch (e) {}
+}
+function arcSave() { try { localStorage.setItem(ARC_KEY, JSON.stringify({ best: ARC.best, badges: ARC.badges })); } catch (e) {} }
+function arcAward(key) {
+  if (ARC.badges[key]) return null;
+  ARC.badges[key] = true; arcSave(); return ARC_BADGES[key];
+}
+
+/* The elements the games draw from: the ones the student has completed
+   (or the first ten until they have completed four). */
+function arcPool(minShells) {
+  let idx = [...STATE.completed];
+  if (idx.length < 4) idx = [...Array(10).keys()];
+  return idx.map(i => ELEMENTS[i]).filter(e => e.shells.length >= (minShells || 1));
+}
+function arcNextElement(pool, last) {
+  let el, tries = 0;
+  do { el = arcPick(pool); tries++; } while (pool.length > 1 && el === last && tries < 20);
+  return el;
+}
+
+/* ---------- navigation ---------- */
+function arcadeOpen() {
+  arcLoad();
+  if (!ARC.g) arcRenderMenu();
+}
+function arcadeLeave() { arcStop(); }
+function arcStop() {
+  if (ARC.timer) { clearInterval(ARC.timer); ARC.timer = null; }
+  ARC.g = null;
+}
+function arcExit() {
+  arcStop();
+  $a('arc-game').style.display = 'none';
+  $a('arc-result').style.display = 'none';
+  $a('arc-menu').style.display = 'block';
+  arcRenderMenu();
+  window.scrollTo(0, 0);
+}
+function arcRenderMenu() {
+  arcLoad();
+  $a('arc-menu').style.display = 'block';
+  $a('arc-game').style.display = 'none';
+  $a('arc-result').style.display = 'none';
+  const done = STATE.completed.size;
+  $a('arc-pool-note').textContent = done < 4
+    ? 'Playing with the first ten elements. Complete four elements on the periodic table to play with the ones you have learned.'
+    : `Playing with the ${done} element${done > 1 ? 's' : ''} you have completed.`;
+  $a('arc-best-doctor').textContent  = ARC.best.doctor  ? `Best score: ${ARC.best.doctor}`  : 'Not played yet';
+  $a('arc-best-mystery').textContent = ARC.best.mystery ? `Best score: ${ARC.best.mystery}` : 'Not played yet';
+  $a('arc-best-blitz').textContent   = ARC.best.blitz   ? `Best score: ${ARC.best.blitz}`   : 'Not played yet';
+  $a('arc-badges').innerHTML = Object.entries(ARC_BADGES).map(([k, b]) =>
+    `<div class="arc-badge ${ARC.badges[k] ? 'on' : ''}" title="${b.desc}"><span>${b.icon}</span><div><b>${b.name}</b><small>${b.desc}</small></div></div>`
+  ).join('');
+}
+
+function arcStart(mode) {
+  arcLoad(); arcStop();
+  ARC.g = { mode };
+  $a('arc-menu').style.display = 'none';
+  $a('arc-result').style.display = 'none';
+  $a('arc-game').style.display = 'block';
+  $a('arc-board-wrap').style.display = mode === 'mystery' ? 'none' : '';
+  $a('arc-options').style.display    = mode === 'mystery' ? '' : 'none';
+  $a('arc-timer-wrap').style.display = mode === 'blitz' ? '' : 'none';
+  $a('arc-timer-fill').style.width = '100%';
+  arcMsg('');
+  ({ doctor: docStart, mystery: mysStart, blitz: blzStart })[mode]();
+  window.scrollTo(0, 0);
+}
+
+/* ---------- shared UI helpers ---------- */
+function arcMsg(text, kind) {
+  const m = $a('arc-msg');
+  m.textContent = text || '';
+  m.className = 'arc-msg' + (text ? ' show ' + (kind || 'info') : '');
+}
+function arcClue(el, full) {
+  $a('arc-clue').innerHTML =
+    '<h4>Periodic table notation</h4><div class="arc-clue-row">' +
+    (full ? `<span>Symbol <b>${el.sym}</b></span><span>Name <b>${el.name}</b></span>` : '') +
+    `<span>Period <b>${el.period}</b></span><span>Group <b>${el.ptGroup}</b></span></div>`;
+}
+function arcControls(list) {
+  const box = $a('arc-controls'); box.innerHTML = '';
+  list.forEach(b => {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = b.cls || 'btn-secondary'; btn.textContent = b.label;
+    if (b.id) btn.id = b.id;
+    btn.addEventListener('click', b.fn);
+    box.appendChild(btn);
+  });
+}
+function arcStats(html) { $a('arc-stats').innerHTML = html; }
+function arcHint(el) {
+  const outer = el.shells[el.shells.length - 1];
+  return `Period ${el.period} means ${el.period} shell${el.period > 1 ? 's' : ''} hold electrons. ` +
+         `Group ${el.ptGroup} means the outer shell holds ${outer} electron${outer > 1 ? 's' : ''}. The inner shells are full.`;
+}
+
+/* ---------- the board (Atom Doctor and Blitz) ---------- */
+let arcEid = 0;
+function arcBuildBoard() {
+  const box = $a('arc-board');
+  buildShellDiagram(box, { shells: [0, 0, 0, 0], z: 0, mass: 0 }, {
+    zoneClass: 'quiz-shell-zone', zoneId: 'arc-zone-', droppedId: 'arc-dropped-', labelId: 'arc-label-',
+    setup: zone => makeActivatable(zone, e => arcZoneClick(e))
+  });
+  const n = box.querySelector('.nucleus');
+  if (n) n.innerHTML = '<div style="font-size:1.2rem;color:#fcc">+</div>';
+  box.querySelectorAll('.quiz-shell-zone').forEach(z =>
+    z.setAttribute('aria-label', `Shell ${+z.dataset.shellIndex + 1}`));
+}
+function arcRing(i) { return $a('arc-dropped-' + i); }
+function arcCounts() { return [0, 1, 2, 3].map(i => arcRing(i).children.length); }
+function arcClearMarks() {
+  document.querySelectorAll('#arc-board .quiz-shell-zone').forEach(z => z.classList.remove('dnd-wrong', 'dnd-correct'));
+}
+function arcAddElectron(i) {
+  const box = arcRing(i), e = document.createElement('div');
+  e.className = 'dropped-electron';
+  e.dataset.eid = 'arc-e-' + (++arcEid);
+  makeActivatable(e, ev => { ev.stopPropagation(); arcElectronClick(e); });
+  if (ARC.g && ARC.g.mode === 'doctor') enablePointerDrag(e, arcDrag);
+  box.appendChild(e); layoutRing(box);
+  return e;
+}
+function arcSetCounts(arr) {
+  for (let i = 0; i < 4; i++) arcRing(i).innerHTML = '';
+  arcClearMarks();
+  arr.forEach((n, i) => { for (let k = 0; k < n; k++) arcAddElectron(i); });
+}
+function arcMoveElectron(e, to) {
+  const src = e.parentNode;
+  if (+src.dataset.shellIndex === to) return false;
+  const dest = arcRing(to);
+  dest.appendChild(e); layoutRing(src); layoutRing(dest);
+  arcClearMarks();
+  return true;
+}
+function arcZoneClick(ev) {
+  const g = ARC.g; if (!g || g.done) return;
+  const i = +ev.currentTarget.dataset.shellIndex;
+  if (g.mode === 'blitz') {
+    if (!g.running) return;
+    if (arcCounts().reduce((a, b) => a + b, 0) >= 24) return;
+    arcAddElectron(i);
+  } else if (g.mode === 'doctor' && g.sel) {
+    const e = g.sel; arcSelect(null);
+    if (arcMoveElectron(e, i)) { g.moves++; docStatsRefresh(); }
+  }
+}
+function arcElectronClick(e) {
+  const g = ARC.g; if (!g || g.done) return;
+  if (g.mode === 'blitz') {
+    if (!g.running) return;
+    const p = e.parentNode; e.remove(); layoutRing(p);
+  } else if (g.mode === 'doctor') {
+    arcSelect(g.sel === e ? null : e);
+  }
+}
+function arcSelect(e) {
+  const g = ARC.g;
+  document.querySelectorAll('#arc-board .dropped-electron.selected').forEach(x => x.classList.remove('selected'));
+  g.sel = e; if (e) e.classList.add('selected');
+}
+/* drag-to-move context for Atom Doctor (same pointer-drag module as the build page) */
+const arcDrag = {
+  zoneSelector: '#arc-board .quiz-shell-zone',
+  hasRoom() { return true; },
+  begin(el) { if (ARC.g) arcSelect(null); },
+  drop(zone, el) {
+    const g = ARC.g; if (!g || g.done) return;
+    if (arcMoveElectron(el, +zone.dataset.shellIndex)) { g.moves++; docStatsRefresh(); }
+  }
+};
+
+/* ---------- mini atom for the Mystery Element options ---------- */
+function arcDrawAtom(canvas, shells) {
+  canvas.innerHTML = '';
+  const SIZE = 300, pct = v => `${(v / SIZE) * 100}%`, c = SIZE / 2;
+  shells.forEach((count, si) => {
+    const radius = SHELL_DIAMETERS[si] / 2;
+    const ring = document.createElement('div');
+    ring.className = `shell-ring ring-${si + 1}`;
+    ring.style.width = pct(SHELL_DIAMETERS[si]); ring.style.aspectRatio = '1';
+    ring.style.borderColor = SHELL_COLOURS[si];
+    canvas.appendChild(ring);
+    const slots = electronSlots(count, si);
+    for (let k = 0; k < count; k++) {
+      const a = (slots[k].angle * Math.PI) / 180;
+      const tx = (-Math.sin(a) * slots[k].side * 0.31).toFixed(3);
+      const ty = ( Math.cos(a) * slots[k].side * 0.31).toFixed(3);
+      const dot = document.createElement('div');
+      dot.className = 'electron-dot';
+      dot.style.left = `calc(${pct(c + radius * Math.cos(a))} + var(--e) * ${tx})`;
+      dot.style.top  = `calc(${pct(c + radius * Math.sin(a))} + var(--e) * ${ty})`;
+      canvas.appendChild(dot);
+    }
+  });
+  const nuc = document.createElement('div'); nuc.className = 'nucleus'; canvas.appendChild(nuc);
+}
+
+/* ---------- results screen ---------- */
+function arcFinish(o) {
+  // o: { mode, title, big, lines[], score, badges[] }
+  const g = ARC.g;
+  const newBest = o.score > (ARC.best[o.mode] || 0);
+  if (newBest) { ARC.best[o.mode] = o.score; arcSave(); }
+  const earned = (o.badges || []).filter(Boolean);
+  const mode = o.mode;
+  if (ARC.timer) { clearInterval(ARC.timer); ARC.timer = null; }
+  ARC.g = null;
+  $a('arc-game').style.display = 'none';
+  const r = $a('arc-result'); r.style.display = 'block';
+  r.innerHTML =
+    `<div class="arc-result-card"><h2>${o.title}</h2><div class="arc-big">${o.big}</div>` +
+    `<div class="arc-lines">${o.lines.map(l => `<div>${l}</div>`).join('')}</div>` +
+    `<div class="arc-score">Score ${o.score}${newBest ? ' · 🎉 New best!' : ` · Best ${ARC.best[mode]}`}</div>` +
+    (earned.length ? `<div class="arc-earned">${earned.map(b => `<span>${b.icon} ${b.name}</span>`).join('')}</div>` : '') +
+    `<div class="arc-bottom-static"><button class="btn-primary" id="arc-again">↻ Play again</button>` +
+    `<button class="btn-secondary" id="arc-back">← Arcade</button></div></div>`;
+  $a('arc-again').onclick = () => arcStart(mode);
+  $a('arc-back').onclick  = arcExit;
+  window.scrollTo(0, 0);
+}
+
+/* ============================================================
+   GAME 1 — ATOM DOCTOR
+   ============================================================ */
+function docStart() {
+  const pool = arcPool(2), list = [];
+  for (let k = 0; k < 5; k++) list.push(arcNextElement(pool, list[list.length - 1]));
+  Object.assign(ARC.g, { list, n: 0, stars: 0, score: 0, perfect: true, cured: 0 });
+  $a('arc-title').textContent = '🩺 Atom Doctor';
+  arcBuildBoard();
+  docPatient();
+}
+function docPatient() {
+  const g = ARC.g, el = g.list[g.n];
+  const correct = [0, 1, 2, 3].map(i => el.shells[i] || 0);
+  const nMoves = [1, 1, 2, 2, 3][g.n];
+  let faulty = null;
+  for (let t = 0; t < 60 && !faulty; t++) {
+    const f = correct.slice();
+    for (let m = 0; m < nMoves; m++) {
+      const srcs = f.map((n, i) => n > 0 ? i : -1).filter(i => i >= 0);
+      const src = arcPick(srcs);
+      const dsts = [...Array(el.shells.length).keys()].filter(i => i !== src);
+      f[src]--; f[arcPick(dsts)]++;
+    }
+    if (f.join() !== correct.join()) faulty = f;
+  }
+  if (!faulty) { faulty = correct.slice(); faulty[0]--; faulty[1]++; }
+  Object.assign(g, {
+    el, correct, faulty, moves: 0, wrong: 0, hint: false, done: false, sel: null,
+    optimal: faulty.reduce((s, n, i) => s + Math.max(0, n - correct[i]), 0)
+  });
+  arcClue(el, true);
+  const nuc = document.querySelector('#arc-board .nucleus');       // the patient's symbol sits in the nucleus
+  if (nuc) nuc.innerHTML = `<div style="font-size:1.05rem;font-weight:700;color:#fff">${el.sym}</div>`;
+  arcSetCounts(faulty);
+  arcMsg('This atom has its electrons in the wrong shells. Drag them (or tap an electron, then a circle) to fix it.', 'info');
+  arcControls([
+    { label: '✔ Check', cls: 'btn-primary', fn: docCheck },
+    { label: '↺ Reset', fn: () => { if (g.done) return; g.moves = 0; arcSetCounts(g.faulty); arcSelect(null); docStatsRefresh(); arcMsg(''); } },
+    { label: '✨ Hint', cls: 'btn-hint', fn: () => { if (g.done) return; g.hint = true; arcMsg('💡 ' + arcHint(el), 'info'); } }
+  ]);
+  docStatsRefresh();
+}
+function docStatsRefresh() {
+  const g = ARC.g;
+  arcStats(`<span>Patient ${g.n + 1}/5</span><span>Moves ${g.moves}</span><span>★ ${g.stars}</span>`);
+}
+function docCheck() {
+  const g = ARC.g; if (!g || g.done) return;
+  const c = arcCounts(), ok = c.join() === g.correct.join();
+  if (!ok) {
+    g.wrong++;
+    document.querySelectorAll('#arc-board .quiz-shell-zone').forEach(z => {
+      const i = +z.dataset.shellIndex;
+      z.classList.toggle('dnd-wrong', c[i] !== g.correct[i]);
+    });
+    arcMsg('❌ Not quite. The red shells still need fixing. Try again!', 'bad');
+    return;
+  }
+  g.done = true; arcSelect(null);
+  let s = 3;
+  if (g.moves > g.optimal) s--;
+  if (g.wrong > 0) s--;
+  if (g.hint) s--;
+  s = Math.max(1, s);
+  if (s < 3) g.perfect = false;
+  g.stars += s; g.score += s * 100; g.cured++;
+  document.querySelectorAll('#arc-board .quiz-shell-zone').forEach(z => {
+    if (c[+z.dataset.shellIndex] > 0) z.classList.add('dnd-correct');
+  });
+  arcMsg(`✅ Cured! ${'★'.repeat(s)}${'☆'.repeat(3 - s)}  (${g.el.name}: ${g.el.shells.join(', ')})`, 'ok');
+  docStatsRefresh();
+  g.pendingBadge = arcAward('cure');
+  const last = g.n === 4;
+  arcControls([{ label: last ? '🏁 See results' : 'Next patient →', cls: 'btn-primary', fn: () => last ? docEnd() : (g.n++, docPatient()) }]);
+}
+function docEnd() {
+  const g = ARC.g;
+  const b = [g.pendingBadge, g.perfect && g.cured === 5 ? arcAward('perfect') : null];
+  arcFinish({ mode: 'doctor', title: '🩺 Rounds complete', big: `${'★'.repeat(g.stars)}`.slice(0, 15) || '☆',
+    lines: [`${g.stars} of 15 stars`, `${g.cured} of 5 patients cured`], score: g.score, badges: b });
+}
+
+/* ============================================================
+   GAME 2 — MYSTERY ELEMENT
+   ============================================================ */
+function mysStart() {
+  const pool = arcShuffle(arcPool(1)), qs = [];
+  while (qs.length < 8) {
+    const round = arcShuffle(pool);
+    if (qs.length && round[0] === qs[qs.length - 1] && round.length > 1) round.push(round.shift());
+    round.forEach(e => { if (qs.length < 8) qs.push(e); });
+  }
+  Object.assign(ARC.g, { qs, n: 0, lives: 3, score: 0, streak: 0, maxStreak: 0, correct: 0 });
+  $a('arc-title').textContent = '🔎 Mystery Element';
+  mysQuestion();
+}
+function mysOptions(el) {
+  const sig = e => e.shells.join(',');
+  const others = ELEMENTS.filter(e => sig(e) !== sig(el));
+  const sameP = arcShuffle(others.filter(e => e.period === el.period));
+  const sameG = arcShuffle(others.filter(e => e.ptGroup === el.ptGroup));
+  const seen = new Set([sig(el)]), picks = [];
+  [sameP[0], sameG[0], ...arcShuffle(others)].forEach(e => {
+    if (e && picks.length < 3 && !seen.has(sig(e))) { seen.add(sig(e)); picks.push(e); }
+  });
+  return arcShuffle([el, ...picks]);
+}
+function mysStatsRefresh() {
+  const g = ARC.g;
+  arcStats(`<span>${g.n + 1}/8</span><span>${'❤️'.repeat(g.lives)}${'🖤'.repeat(3 - g.lives)}</span><span>🔥 ${g.streak}</span><span>Score ${g.score}</span>`);
+}
+function mysQuestion() {
+  const g = ARC.g, el = g.qs[g.n];
+  g.el = el; g.opts = mysOptions(el); g.locked = false; g.hint = false;
+  arcClue(el, false);
+  arcMsg('Which electron arrangement belongs to this period and group?', 'info');
+  const box = $a('arc-options'); box.innerHTML = '';
+  g.opts.forEach((o, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'arc-opt'; b.dataset.i = i;
+    b.setAttribute('aria-label', `Option ${i + 1}`);
+    b.innerHTML = '<div class="atom-canvas"></div><div class="arc-cap">&nbsp;</div>';
+    arcDrawAtom(b.querySelector('.atom-canvas'), o.shells);
+    b.addEventListener('click', () => mysPick(b));
+    box.appendChild(b);
+  });
+  arcControls([{ label: '✨ 50:50 hint', cls: 'btn-hint', id: 'mys-hint', fn: mysHint }]);
+  mysStatsRefresh();
+}
+function mysHint() {
+  const g = ARC.g; if (!g || g.locked || g.hint) return;
+  g.hint = true;
+  const wrong = arcShuffle(g.opts.map((o, i) => o === g.el ? -1 : i).filter(i => i >= 0)).slice(0, 2);
+  const btns = $a('arc-options').children;
+  wrong.forEach(i => btns[i].classList.add('dim'));
+  arcMsg('💡 Two options removed. This question is worth half the points.', 'info');
+}
+function mysPick(btn) {
+  const g = ARC.g; if (!g || g.locked) return;
+  g.locked = true;
+  const idx = +btn.dataset.i, ok = g.opts[idx] === g.el, el = g.el;
+  const btns = [...$a('arc-options').children];
+  btns.forEach((b, i) => {
+    const o = g.opts[i];
+    b.classList.remove('dim');
+    b.querySelector('.arc-cap').textContent = `${o.shells.join(', ')} · ${o.name}`;
+    if (o === el) b.classList.add('correct');
+  });
+  if (!ok) btn.classList.add('wrong');
+  const outer = el.shells[el.shells.length - 1];
+  const why = `Period ${el.period} = ${el.period} shell${el.period > 1 ? 's' : ''}; Group ${el.ptGroup} = ${outer} electron${outer > 1 ? 's' : ''} in the outer shell.`;
+  let badge = null;
+  if (ok) {
+    let pts = 100 + 25 * Math.min(g.streak, 4);
+    if (g.hint) pts = Math.round(pts / 2);
+    g.score += pts; g.streak++; g.correct++; g.maxStreak = Math.max(g.maxStreak, g.streak);
+    if (g.streak >= 5) badge = arcAward('streak');
+    arcMsg(`✅ ${el.name} (${el.sym})! +${pts}. ${why}`, 'ok');
+  } else {
+    g.lives--; g.streak = 0;
+    arcMsg(`❌ It was ${el.name} (${el.sym}). ${why}`, 'bad');
+  }
+  g.badgeNow = g.badgeNow || badge;
+  mysStatsRefresh();
+  const over = g.lives <= 0 || g.n === 7;
+  arcControls([{ label: over ? '🏁 See results' : 'Next →', cls: 'btn-primary', fn: () => over ? mysEnd() : (g.n++, mysQuestion()) }]);
+}
+function mysEnd() {
+  const g = ARC.g;
+  const b = [g.badgeNow, g.correct === 8 ? arcAward('sharp') : null];
+  arcFinish({ mode: 'mystery', title: g.lives > 0 ? '🔎 Case closed' : '🔎 Out of lives',
+    big: `${g.correct}/${Math.min(8, g.n + 1)}`,
+    lines: [`Best streak ${g.maxStreak}`, `${g.lives} ${g.lives === 1 ? 'life' : 'lives'} left`], score: g.score, badges: b });
+}
+
+/* ============================================================
+   GAME 3 — BLITZ
+   ============================================================ */
+function blzStart() {
+  Object.assign(ARC.g, { score: 0, streak: 0, maxStreak: 0, correct: 0, wrong: 0, running: false, done: false, last: null, badgeNow: null });
+  $a('arc-title').textContent = '⚡ Blitz';
+  arcBuildBoard();
+  arcSetCounts([0, 0, 0, 0]);
+  $a('arc-clue').innerHTML = '<h4>Periodic table notation</h4><div class="arc-clue-row"><span>Ready? You have 60 seconds.</span></div>';
+  arcMsg('Tap a circle to add an electron. Tap an electron to remove it. Wrong answers cost 3 seconds.', 'info');
+  arcControls([{ label: '▶ Start', cls: 'btn-primary', fn: blzGo }]);
+  arcStats('<span>60s</span><span>Score 0</span>');
+}
+function blzGo() {
+  const g = ARC.g; if (!g || g.running) return;
+  g.running = true; g.end = performance.now() + 60000;
+  blzNext();
+  ARC.timer = setInterval(blzTick, 150);
+}
+function blzMult(g) { return 1 + Math.min(3, Math.floor(g.streak / 3)); }
+function blzStatsRefresh() {
+  const g = ARC.g;
+  const t = Math.max(0, Math.ceil((g.end - performance.now()) / 1000));
+  arcStats(`<span>${t}s</span><span>✔ ${g.correct}</span><span>×${blzMult(g)}</span><span>Score ${g.score}</span>`);
+}
+function blzTick() {
+  const g = ARC.g; if (!g || !g.running) return;
+  const left = g.end - performance.now();
+  $a('arc-timer-fill').style.width = `${Math.max(0, Math.min(100, left / 600))}%`;
+  blzStatsRefresh();
+  if (left <= 0) blzEnd();
+}
+function blzNext() {
+  const g = ARC.g;
+  g.el = arcNextElement(arcPool(1), g.last); g.last = g.el;
+  g.correct4 = [0, 1, 2, 3].map(i => g.el.shells[i] || 0);
+  arcSetCounts([0, 0, 0, 0]);
+  arcClue(g.el, true);
+  arcControls([
+    { label: '✔ Lock in', cls: 'btn-primary', fn: blzCheck },
+    { label: '↺ Clear', fn: () => arcSetCounts([0, 0, 0, 0]) },
+    { label: '⏭ Skip', fn: () => { g.streak = 0; arcMsg('Skipped.', 'info'); blzNext(); blzStatsRefresh(); } }
+  ]);
+  blzStatsRefresh();
+}
+function blzCheck() {
+  const g = ARC.g; if (!g || !g.running) return;
+  if (arcCounts().join() === g.correct4.join()) {
+    const pts = 10 * blzMult(g);
+    g.score += pts; g.streak++; g.correct++; g.maxStreak = Math.max(g.maxStreak, g.streak);
+    if (g.streak >= 5) g.badgeNow = g.badgeNow || arcAward('streak');
+    arcMsg(`✅ +${pts}`, 'ok');
+    blzNext();
+  } else {
+    g.streak = 0; g.wrong++; g.end -= 3000;
+    document.querySelectorAll('#arc-board .quiz-shell-zone').forEach(z => z.classList.add('dnd-wrong'));
+    setTimeout(arcClearMarks, 350);
+    arcMsg('❌ Not quite. −3 seconds', 'bad');
+  }
+  blzStatsRefresh();
+}
+function blzEnd() {
+  const g = ARC.g; if (!g) return;
+  g.running = false;
+  const b = [g.badgeNow, g.correct >= 6 ? arcAward('speed') : null];
+  arcFinish({ mode: 'blitz', title: "⚡ Time's up!", big: `${g.correct}`,
+    lines: [`${g.correct} atom${g.correct === 1 ? '' : 's'} built`, `Best streak ${g.maxStreak}`, `${g.wrong} wrong lock-in${g.wrong === 1 ? '' : 's'}`],
+    score: g.score, badges: b });
+}
+
+</script>
+</body>
+</html>
