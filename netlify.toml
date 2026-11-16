@@ -1,0 +1,5 @@
+# PAUSED: Netlify skips every build while this is here, so pushes to GitHub do not
+# create production deploys (each successful production deploy costs 15 credits).
+# To resume automatic deploys, delete this file (or the "ignore" line) and push.
+[build]
+  ignore = "exit 0"
