@@ -42,14 +42,16 @@
   --danger:     #e74c3c;
   --warning:    #f39c12;
   --light:      #ecf0f1;
-  --bg-deep:    #1a1a2e;
-  --bg-card:    #16213e;
-  --bg-inset:   #0f3460;
-  --border:     #34495e;
-  --text-main:  #eeeeee;
-  --text-muted: #aaaaaa;
-  --text-blue:  #aad4f5;
+  --bg-deep:    #ffffff;
+  --bg-card:    #f3f6fa;
+  --bg-inset:   #e6eef7;
+  --border:     #c3cfdc;
+  --text-main:  #1c2733;
+  --text-muted: #566272;
+  --text-blue:  #1f5f9c;
+  --ink:        #111827;
   --electron:   #f1c40f;
+  --electron-text: #9a7200;
   --nucleus:    #e74c3c;
 }
 
@@ -965,7 +967,7 @@ body.is-dragging-electron * { cursor: grabbing !important; -webkit-user-select: 
   font-weight: 600;
   white-space: nowrap;
   pointer-events: none;
-  text-shadow: 0 0 4px #000, 0 0 4px #000;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
 }
 #shell-drop-zones:not(.show-max) .ring-label { display: none; }
 .btn-hint[aria-pressed="true"] { box-shadow: 0 0 0 2px #fff inset; }
@@ -1549,6 +1551,30 @@ html[data-layout="tall"] .dnd-ref .dnd-ref-canvas { width: 240px !important; }
 #page-learn .dnd-ref-title, #page-learn .dnd-ref-ea { zoom: var(--lt); }
 .rebuild-btn { display: block; margin: 4px auto 0; }
 #ea-text.ea-hidden { color: var(--text-muted); opacity: .75; }
+
+/* ================= Light theme (white page background) ================= */
+body { background: #fff; color: var(--text-main); }
+/* grey buttons and pills: dark text */
+.nav-btn, .back-btn, .btn-secondary, .nav-arrow, .sym-btn { color: var(--ink); }
+.sym-btn.active, .sym-btn[aria-pressed="true"], .sym-btn.selected { color: #fff; }
+.nav-btn.active { color: #fff; }
+/* text that was white on dark cards */
+.nuclide-display, .q-text, .fill-row input, .email-row input, .score-circle .score-num,
+.arc-card h3, .arc-badge b, .arc-title, .arc-clue-row b, .arc-opt, .arc-score,
+.pt-key b, .pt-key span:nth-of-type(2), #pg-card .pg-values strong,
+.legend-item, #page-table .legend { color: var(--ink); }
+.nuclide-display div, .nuclide-display span { color: inherit; }
+#pg-card .pg-values { color: var(--text-muted); }
+/* feedback and messages */
+.dnd-feedback.fb-ok, .arc-msg.ok { background: #e6f6ec; color: #17653a; }
+.dnd-feedback.fb-error, .arc-msg.bad { background: #fdeceb; color: #b3261e; }
+.arc-msg.info { background: #eaf2fb; }
+.arc-earned span { background: #fff4d6; color: #6b4e00; }
+.badge-mcq { background: #dbeafe; color: #1e4f8f; }
+.badge-fill { background: #dcf3e4; color: #1b6a3a; }
+.mcq-option:hover, .mcq-option.selected { background: #dbeafe; }
+header { box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+.badge-dnd { background: #fdecc8; color: #7a4a05; }
 </style>
 
 
@@ -1681,7 +1707,7 @@ html[data-layout="tall"] .dnd-ref .dnd-ref-canvas { width: 240px !important; }
     <!-- Electron Arrangement Card -->
     <div class="notation-card">
       <h3>Electron Arrangement</h3>
-      <div style="font-size:1.3rem; font-weight:700; color:var(--electron);
+      <div style="font-size:1.3rem; font-weight:700; color:var(--electron-text);
                   letter-spacing:2px; margin-bottom:6px;"
            id="ea-text">
       </div>
@@ -3933,7 +3959,7 @@ function renderFill(q, index) {
       number of protons + neutrons<br>
     <span style="color:var(--accent)">Atomic number</span> (bottom left) =
       number of protons<br>
-    <span style="color:var(--electron)">Electrons</span> =
+    <span style="color:var(--electron-text)">Electrons</span> =
       same as number of protons (neutral atom)
   `;
   container.appendChild(reference);
@@ -3956,7 +3982,7 @@ function renderFill(q, index) {
       key:         'electrons',
       label:       'Number of electrons',
       placeholder: 'e.g. 11',
-      colour:      'var(--electron)'
+      colour:      'var(--electron-text)'
     }
   ];
 
